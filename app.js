@@ -208,7 +208,7 @@
       D.sug = D.sug || {}; var ks = [];
       Object.keys(r.sugerencias || {}).forEach(function (k) { var t = tx(r.sugerencias[k]); if (t && VOZ_CAMPOS[k]) { D.sug[k] = { text: t, nota: id }; ks.push(k); } });
       saveDraft(true); render();
-      toast(ks.length ? 'Sugerencias listas en ' + ks.length + (ks.length === 1 ? ' campo' : ' campos') : 'No se encontró contenido para sugerir');
+      toast(!ks.length ? 'No se encontró contenido para sugerir' : n.campo ? 'Sugerencia lista debajo del campo' : 'Sugerencias listas en ' + ks.length + ' campos · los pasos con punto verde tienen sugerencias');
     }, function () { n.st = 'pend'; saveDraft(true); render(); toast('No se pudo interpretar la nota; queda guardada'); });
   }
   function sugCard(k) {
@@ -218,23 +218,28 @@
       '<p>' + esc(sg.text) + '</p><div class="sug-a"><button type="button" class="btn sm" data-act="sugno" data-v="' + k + '">Descartar</button>' +
       (full ? '<button type="button" class="btn sm" data-act="sugadd" data-v="' + k + '">Agregar al final</button><button type="button" class="btn sm primary" data-act="sugusar" data-v="' + k + '">Reemplazar</button>' : '<button type="button" class="btn sm primary" data-act="sugusar" data-v="' + k + '">' + ic('i-check') + 'Usar</button>') + '</div></div>';
   }
+  function notaRow(n) {
+    var st = n.st === 'run' ? '<span class="chip run">Interpretando…</span>' : n.st === 'ok' ? '<span class="chip ok">Interpretada</span>' : '<span class="chip pend">Pendiente</span>';
+    var d = new Date(n.at);
+    return '<div class="nota"><div class="nota-h">' + ic('i-mic') + '<b>' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '</b><span class="hint">' + mmss(n.dur) + '</span>' + st + '</div>' +
+      (n.audio ? '<audio controls preload="none" data-aud="' + n.id + '"></audio>' : '') +
+      (n.text ? '<details><summary>Transcripción' + (n.textSim ? ' (simulada)' : '') + '</summary><p>' + esc(n.text) + '</p></details>' : '') +
+      '<div class="nota-a">' + (n.st === 'pend' ? '<button type="button" class="btn sm" data-act="notaint" data-v="' + n.id + '">' + ic('i-spark') + 'Interpretar</button>' : '') +
+      '<button type="button" class="btn sm ghost" data-act="notadel" data-v="' + n.id + '" aria-label="Eliminar nota">' + ic('i-trash') + 'Eliminar</button></div></div>';
+  }
+  function notasDe(campo) { return (D.notes || []).filter(function (n) { return (n.campo || null) === campo; }); }
+  function notasList(L, label) {
+    if (!L.length) return '';
+    return '<details class="notas"><summary>' + ic('i-mic') + L.length + ' ' + label + (L.length === 1 ? '' : 's') + (L.some(function (n) { return n.st === 'pend'; }) ? ' · <span class="pendtx">pendiente por interpretar</span>' : '') + '</summary>' + L.slice().reverse().map(notaRow).join('') + '</details>';
+  }
+  /* Dictado completo: una sola vez, al inicio del contenido (paso 2) */
   function vozCard() {
-    if (!VOZ.ok() && !(D.notes || []).length) return '';
-    var notes = D.notes || [], k = D.step;
-    var pend = Object.keys(D.sug || {}).filter(function (x) { return VOZ_PASO[x] !== k; });
-    var rows = notes.slice().reverse().map(function (n) {
-      var st = n.st === 'run' ? '<span class="chip run">Interpretando…</span>' : n.st === 'ok' ? '<span class="chip ok">Interpretada</span>' : '<span class="chip pend">Pendiente</span>';
-      var d = new Date(n.at);
-      return '<div class="nota"><div class="nota-h">' + ic('i-mic') + '<b>' + (n.campo ? esc(VOZ_CAMPOS[n.campo]) : 'Informe completo') + '</b><span class="hint">' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' · ' + mmss(n.dur) + '</span>' + st + '</div>' +
-        (n.audio ? '<audio controls preload="none" data-aud="' + n.id + '"></audio>' : '') +
-        (n.text ? '<details><summary>Transcripción' + (n.textSim ? ' (simulada)' : '') + '</summary><p>' + esc(n.text) + '</p></details>' : '') +
-        '<div class="nota-a">' + (n.st === 'pend' ? '<button type="button" class="btn sm" data-act="notaint" data-v="' + n.id + '">' + ic('i-spark') + 'Interpretar</button>' : '') +
-        '<button type="button" class="btn sm ghost" data-act="notadel" data-v="' + n.id + '" aria-label="Eliminar nota">' + ic('i-trash') + 'Eliminar</button></div></div>';
-    }).join('');
-    return '<div class="voz"><div class="voz-h">' + ic('i-mic') + '<div><b>Notas de voz</b><span class="hint">Cuenta el servicio de corrido: la IA reparte lo que digas entre los campos y tú decides qué usar.</span></div></div>' +
-      (REC.on && !REC.campo ? recBar() : VOZ.ok() ? '<button type="button" class="btn primary block" data-act="dictar"' + (REC.on ? ' disabled' : '') + '>' + ic('i-mic') + 'Dictar informe</button>' : '') +
-      (pend.length ? '<div class="voz-pend"><span class="hint">Sugerencias por revisar:</span>' + [1, 2, 3].filter(function (st) { return st !== k && pend.some(function (x) { return VOZ_PASO[x] === st; }); }).map(function (st) { var ks = pend.filter(function (x) { return VOZ_PASO[x] === st; }); return '<button type="button" class="chip link" data-act="step" data-v="' + st + '" title="' + esc(ks.map(function (x) { return VOZ_CAMPOS[x]; }).join(', ')) + '">Paso ' + (st + 1) + ' · ' + STEPS[st][0] + ' (' + ks.length + ')</button>'; }).join('') + '</div>' : '') +
-      (notes.length ? '<details class="notas"' + (notes.some(function (n) { return n.st !== 'ok'; }) ? ' open' : '') + '><summary>' + notes.length + (notes.length === 1 ? ' nota guardada' : ' notas guardadas') + ' en este borrador</summary>' + rows + '</details>' : '') + '</div>';
+    if (D.step !== 1) return '';
+    var L = notasDe(null); if (!VOZ.ok() && !L.length) return '';
+    var body = REC.on && !REC.campo ? recBar() :
+      '<div class="voz-row">' + ic('i-mic') + '<div><b>¿Prefieres dictar?</b><span class="hint">Cuenta todo el servicio en una sola nota y la IA lo reparte en los pasos 2 a 4. Si no, llena campo por campo.</span></div>' +
+      (VOZ.ok() ? '<button type="button" class="btn sm" data-act="dictar"' + (REC.on ? ' disabled' : '') + '>Dictar</button>' : '') + '</div>';
+    return '<div class="voz">' + body + notasList(L, 'nota del informe completo') + '</div>';
   }
   function paintAudio() {
     var els = document.querySelectorAll('audio[data-aud]'); if (!els.length) return;
@@ -373,11 +378,11 @@
     return '<div' + fcls(k, req) + ' data-fw="' + k + '"><label for="f-' + k + '"' + (hideLabel ? ' class="sr"' : '') + '>' + x[1] + (req ? ' <span class="req">*</span>' : '') + '</label>' +
       '<div class="fw' + (mic ? ' has-mic' : '') + '"><textarea class="f" id="f-' + k + '" data-f="' + k + '" rows="' + (rows || 4) + '" placeholder="' + esc(x[2]) + '">' + esc(D.f[k]) + '</textarea>' +
       (mic ? '<button type="button" class="mic' + (REC.on && REC.campo === k ? ' on' : '') + '" data-act="mic" data-v="' + k + '" title="Grabar nota de voz para este campo" aria-label="Grabar nota de voz: ' + esc(VOZ_CAMPOS[k]) + '">' + ic('i-mic') + '</button>' : '') + '</div>' +
-      (REC.on && REC.campo === k ? recBar() : '') + sugCard(k) + '</div>';
+      (REC.on && REC.campo === k ? recBar() : '') + sugCard(k) + (VOZ_CAMPOS[k] ? notasList(notasDe(k), 'nota de voz') : '') + '</div>';
   }
   function editView() {
     var s = S.cur, k = D.step;
-    var steps = '<nav class="steps" aria-label="Pasos">' + STEPS.map(function (x, i) { return '<button class="step' + (stepDone(i) ? ' done' : '') + '" data-act="step" data-v="' + i + '"' + (i === k ? ' aria-current="step"' : '') + '><i>' + (stepDone(i) && i !== k ? '✓' : i + 1) + '</i><span>' + x[0] + '</span></button>'; }).join('') + '</nav>';
+    var steps = '<nav class="steps" aria-label="Pasos">' + STEPS.map(function (x, i) { var hasSug = Object.keys(D.sug || {}).some(function (q) { return VOZ_PASO[q] === i; }); return '<button class="step' + (stepDone(i) ? ' done' : '') + (hasSug ? ' has-sug' : '') + '" data-act="step" data-v="' + i + '"' + (i === k ? ' aria-current="step"' : '') + '><i>' + (stepDone(i) && i !== k ? '✓' : i + 1) + '</i><span>' + x[0] + '</span></button>'; }).join('') + '</nav>';
     var body = '';
     if (k === 0) {
       var sites = s.sitios.map(function (x) { return x.planta; }); if (D.f.plant && sites.indexOf(D.f.plant) < 0) sites.push(D.f.plant);
