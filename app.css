@@ -224,11 +224,10 @@ label.btn { cursor: pointer; }
 
 /* ---------- Campos: vacío (guía) vs. lleno ---------- */
 .f::placeholder { color: #8b99ab; font-style: italic; opacity: 1; }
-.field.f-empty .f { background: var(--surface-2); border-style: dashed; border-color: #b7c4d4; }
-.field.f-empty .f:focus { background: var(--surface); border-style: solid; border-color: var(--bright); }
-.field.f-ok .f { background: var(--surface); border-color: #c4d0de; box-shadow: inset 3px 0 0 var(--bright); }
-.field.f-ok .f:focus { box-shadow: inset 3px 0 0 var(--bright), 0 0 0 3px rgba(10,88,235,.15); }
-.field.f-ok > label:not(.sr)::after { content: "✓"; margin-left: 6px; color: var(--ok-ink); font-weight: 600; }
+.field.f-empty .f { background: var(--surface); border-style: dashed; border-color: #b7c4d4; }
+.field.f-empty .f:focus { border-style: solid; border-color: var(--bright); }
+.field.f-ok .f { background: #f0f5fd; border-color: #d3dfef; }
+.field.f-ok .f:focus { background: var(--surface); border-color: var(--bright); }
 .field.rq.f-empty .req { color: #c77700; }
 .field.f-ok .req { display: none; }
 

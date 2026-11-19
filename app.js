@@ -387,7 +387,7 @@
     if (k === 0) {
       var sites = s.sitios.map(function (x) { return x.planta; }); if (D.f.plant && sites.indexOf(D.f.plant) < 0) sites.push(D.f.plant);
       body = '<div class="field"><span class="lb">Servicio</span><b>' + esc(s.nombre) + '</b><span class="hint">' + esc(s.odoo.cliente) + ' · <span class="mono">' + s.ceco + '</span></span></div>' +
-        '<div class="field"><label for="f-plant">Planta <span class="req">*</span></label><select class="f" id="f-plant" data-f="plant"><option value="">Elige la planta</option>' + sites.map(function (p) { return '<option' + (p === D.f.plant ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
+        '<div' + fcls('plant', true) + '><label for="f-plant">Planta <span class="req">*</span></label><select class="f" id="f-plant" data-f="plant"><option value="">Elige la planta</option>' + sites.map(function (p) { return '<option' + (p === D.f.plant ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
         inp('city', 'Ciudad') +
         inp('req', 'Solicitado por', 'text', ' list="dl-req" autocomplete="off"') + '<datalist id="dl-req">' + s.contactos.map(function (c) { return '<option value="' + esc(c.nombre) + '">' + esc(c.cargo) + '</option>'; }).join('') + '</datalist>' +
         '<div class="g2">' + inp('d1', 'Inicio', 'date', ' max="' + TODAY + '"', true) + inp('h1', 'Hora', 'time') + inp('d2', 'Finalización', 'date', ' max="' + TODAY + '"') + inp('h2', 'Hora', 'time') + '</div>' +
