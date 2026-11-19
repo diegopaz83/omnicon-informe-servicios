@@ -135,11 +135,30 @@
       '<span class="rec-live" id="recP">' + (esc(REC.finals + (REC.partial ? ' ' + REC.partial : '')) || 'Escuchando… habla con naturalidad') + '</span>' +
       '<div class="rec-acts"><button type="button" class="btn sm" data-act="reccancel">Cancelar</button><button type="button" class="btn sm primary" data-act="recstop">' + ic('i-stop') + 'Detener</button></div></div>';
   }
+  /* Pantalla completa mientras se dicta el informe: el celular no se usa, solo guía qué contar */
+  var GUIA = [['Generalidades', '¿Qué reportó el cliente, desde cuándo y en qué equipo o proceso?'],
+    ['Actividades', '¿Qué hiciste, paso a paso? Respaldos, ajustes, cambios de programa.'],
+    ['Pruebas', '¿Cómo verificaste que quedó funcionando?'],
+    ['Diagnóstico', '¿Cuál era la causa del problema?'],
+    ['Solución', '¿Qué cambiaste, reemplazaste o ajustaste para resolverlo?'],
+    ['Observaciones', '¿En qué estado queda el sistema? ¿Qué queda pendiente?'],
+    ['Mejoras', '¿Qué le recomiendas al cliente a futuro?']];
+  function dictOverlay() {
+    return '<div class="dictov" role="dialog" aria-modal="true" aria-label="Dictando el informe"><div class="dictov-in">' +
+      '<div class="dictov-top"><span class="dictov-mic">' + ic('i-mic') + '</span><div><small>Dictando el informe</small><b id="recT">' + mmss((Date.now() - REC.t0) / 1000) + ' / ' + mmss(VOZ_MAX) + '</b></div></div>' +
+      '<div class="dictov-scroll"><p class="dictov-lead">Habla con naturalidad; no necesitas tocar el celular. Si te sirve, sigue esta guía:</p>' +
+      '<ol class="dictov-guia">' + GUIA.map(function (g) { return '<li><b>' + g[0] + '</b><span>' + g[1] + '</span></li>'; }).join('') + '</ol>' +
+      '<p class="dictov-note">Si no hablas de alguna sección, se queda vacía: no se inventa nada.</p></div>' +
+      '<p class="dictov-live" id="recP">' + (esc(REC.finals + (REC.partial ? ' ' + REC.partial : '')) || 'Escuchando…') + '</p>' +
+      '<div class="dictov-acts"><button type="button" class="btn" data-act="reccancel">Cancelar</button><button type="button" class="btn cyan" data-act="recstop">' + ic('i-stop') + 'Terminar</button></div></div></div>';
+  }
+  var WL = null;
+  function wake(on) { try { if (on && navigator.wakeLock && !WL) navigator.wakeLock.request('screen').then(function (w) { WL = w; }, function () {}); else if (!on && WL) { WL.release(); WL = null; } } catch (e) {} }
   function recPaint() {
     var t = $('recT'), p = $('recP'); if (!REC.on) return;
     var sec = (Date.now() - REC.t0) / 1000;
     if (t) t.textContent = mmss(sec) + ' / ' + mmss(VOZ_MAX);
-    if (p) p.textContent = (REC.finals + (REC.partial ? ' ' + REC.partial : '')) || 'Escuchando… habla con naturalidad';
+    if (p) p.textContent = (REC.finals + (REC.partial ? ' ' + REC.partial : '')) || (REC.campo ? 'Escuchando… habla con naturalidad' : 'Escuchando…');
     if (sec >= VOZ_MAX) { recStop(false); toast('Se alcanzó el máximo de 3 minutos por nota'); }
   }
   function recStart(campo) {
@@ -169,11 +188,12 @@
       }, function () { if (REC === mine && !REC.via) { toast('No hay acceso al micrófono en esta vista'); recStop(true); } });
     } else if (!REC.via) { REC.on = false; toast('Este navegador no permite grabar notas de voz'); return; }
     REC.tick = setInterval(recPaint, 500);
+    if (!campo) { wake(true); window.scrollTo(0, 0); }
     render();
   }
   function recStop(cancel) {
     if (!REC.on) return;
-    var r = REC; r.on = false; clearInterval(r.tick);
+    var r = REC; r.on = false; clearInterval(r.tick); wake(false);
     var dur = Math.round((Date.now() - r.t0) / 1000);
     var waits = [];
     if (r.via === 'dict' && DICT) waits.push(DICT.stop().catch(function () {}));
@@ -246,7 +266,7 @@
   function vozCard() {
     if (D.step !== 1) return '';
     var L = notasDe(null); if (!VOZ.ok() && !L.length) return '';
-    var body = REC.on && !REC.campo ? recBar() :
+    var body =
       '<div class="voz-row">' + ic('i-mic') + '<div><b>¿Prefieres dictar?</b><span class="hint">Cuenta todo el servicio en una sola nota y la IA lo reparte en los pasos 2 a 4. Si no, llena campo por campo.</span></div>' +
       (VOZ.ok() ? '<button type="button" class="btn sm" data-act="dictar"' + (REC.on ? ' disabled' : '') + '>Dictar</button>' : '') + '</div>';
     return '<div class="voz">' + body + notasList(L, 'nota del informe completo') + '</div>';
@@ -298,7 +318,8 @@
     else if (S.view === 'home') h = top('Mis servicios', 'Kairos · Informes', false) + '<main>' + homeView() + '</main>';
     else if (S.view === 'svc') h = top(S.cur ? S.cur.nombre : 'Servicio', S.cur ? S.cur.ceco : 'Cargando…', true) + '<main>' + (S.loading || !S.cur ? '<div class="spin" role="status" aria-label="Cargando"></div>' : svcView()) + '</main>';
     else if (S.view === 'edit') h = top('Informe de servicio #' + (S.infs.length ? S.infs[S.infs.length - 1].n + 1 : 1), S.cur.ceco + ' · borrador', true) + editView();
-    app.innerHTML = h; paintPhotos(); paintAudio();
+    app.innerHTML = h + (REC.on && !REC.campo && S.view === 'edit' ? dictOverlay() : ''); paintPhotos(); paintAudio();
+    document.body.classList.toggle('dict-on', !!(REC.on && !REC.campo));
   }
 
   /* Entrada: simula el inicio de sesión con Microsoft Entra ID */
