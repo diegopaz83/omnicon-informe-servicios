@@ -202,7 +202,7 @@
     if (navigator.onLine === false) { toast('Sin conexión: la nota queda guardada para interpretarla después'); return; }
     n.st = 'run'; render();
     var ceco = S.cur.ceco;
-    API.interpretarNota(ceco, { campo: n.campo, texto: n.text, duracion: n.dur }).then(function (r) {
+    API.interpretarNota(ceco, { campo: n.campo, texto: n.text, duracion: n.dur, audio: !!n.audio }).then(function (r) {
       if (!D || !S.cur || S.cur.ceco !== ceco) return;
       n.st = 'ok'; n.sim = !!r.simulada; if (!n.text && r.transcripcion) { n.text = r.transcripcion; n.textSim = true; }
       D.sug = D.sug || {}; var ks = [];
@@ -233,7 +233,7 @@
     var d = new Date(n.at);
     return '<div class="nota"><div class="nota-h">' + ic('i-mic') + '<b>' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '</b><span class="hint">' + mmss(n.dur) + '</span>' + st + '</div>' +
       (n.audio ? '<audio controls preload="none" data-aud="' + n.id + '"></audio>' : '') +
-      (n.text ? '<details><summary>Transcripción' + (n.textSim ? ' (simulada)' : '') + '</summary><p>' + esc(n.text) + '</p></details>' : '') +
+      (n.text ? '<details><summary>Transcripción' + (n.textSim ? ' (simulada para la demostración)' : '') + '</summary><p>' + esc(n.text) + '</p></details>' : '') +
       '<div class="nota-a">' + (n.st === 'pend' ? '<button type="button" class="btn sm" data-act="notaint" data-v="' + n.id + '">' + ic('i-spark') + 'Interpretar</button>' : '') +
       '<button type="button" class="btn sm ghost" data-act="notadel" data-v="' + n.id + '" aria-label="Eliminar nota">' + ic('i-trash') + 'Eliminar</button></div></div>';
   }

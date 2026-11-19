@@ -147,17 +147,40 @@
   function trozos(t) { return String(t).split(/(?<=[.;!?])\s+|\n+|\s+(?:y luego|luego|despues|después|ademas|además)\s+/i).map(function (x) { return x.replace(/^[,\s]+|[,\s]+$/g, ''); }).filter(function (x) { return x.length > 3; }); }
   function interpretar(s, nota) {
     var campo = nota.campo || null, texto = String(nota.texto || '').trim(), out = {};
-    /* Sin transcripción no se inventa nada: no hay sugerencias */
+    /* En producción el backend transcribe el audio. Aquí, si el navegador no pudo transcribir pero hay audio,
+       el backend simulado devuelve una transcripción de demostración. Sin audio ni texto no se inventa nada. */
+    var demo = false;
+    if (!texto && nota.audio) { texto = transcripcionDemo(s, campo); demo = true; }
     if (!texto) return { transcripcion: '', sugerencias: {}, simulada: true };
     var partes = trozos(texto);
-    if (campo) { out[campo] = campo === 'acts' ? partes.map(frase).join('\n') : partes.map(frase).join(' '); return { transcripcion: texto, sugerencias: out, simulada: true }; }
+    if (campo) { out[campo] = campo === 'acts' ? partes.map(frase).join('\n') : partes.map(frase).join(' '); return { transcripcion: texto, sugerencias: out, simulada: true, demo: demo }; }
     partes.forEach(function (p) {
       var n = nrm(p), k = 'acts';
       for (var i = 0; i < CLAVES.length; i++) { if (CLAVES[i][1].some(function (w) { return n.indexOf(w) >= 0; })) { k = CLAVES[i][0]; break; } }
       (out[k] = out[k] || []).push(frase(p));
     });
     Object.keys(out).forEach(function (k) { out[k] = out[k].join(k === 'acts' ? '\n' : ' '); });
-    return { transcripcion: texto, sugerencias: out, simulada: true };
+    return { transcripcion: texto, sugerencias: out, simulada: true, demo: demo };
+  }
+  /* Transcripciones de demostración (como si el ingeniero hubiera hablado). La del informe completo
+     no menciona todo a propósito: los campos no dichos quedan sin sugerencia. */
+  var DEMO_N = {};
+  function transcripcionDemo(s, campo) {
+    var eq = s.sistema.eq[0] ? s.sistema.eq[0].n : 'el controlador', pr = s.sistema.prog[0] ? s.sistema.prog[0].n : 'el software de programación';
+    var pl = s.sitios[0] ? s.sitios[0].planta.toLowerCase() : 'la planta', ct = s.contactos[0] ? s.contactos[0].nombre : 'el jefe de mantenimiento';
+    var B = {
+      _: ['El cliente reportó que la línea se venía parando en el turno de la noche con alarmas de comunicación. Revisamos el histórico de alarmas en el HMI y luego sacamos respaldo de los programas de ' + eq + '. Revisamos el cableado del tablero principal. La causa era un conector de red deteriorado que hacía perder la comunicación. Cambiamos el conector y certificamos el cable. Probamos con producto durante todo el turno y no volvió a fallar. Queda operando normal',
+          'Revisamos el tablero de control de ' + pl + ' y luego medimos tensiones en la fuente de 24 voltios. Encontramos que la fuente estaba trabajando al límite y por eso se reiniciaba el controlador. Reemplazamos la fuente por una de mayor capacidad. Verificamos el arranque en frío tres veces seguidas. Queda funcionando normal, pendiente cambiar el ventilador del tablero'],
+      bg: ['Nos llamó ' + ct + ' porque desde la semana pasada la línea presentaba paradas intermitentes en el turno de la noche, con alarmas de comunicación en ' + eq + '.', 'El cliente reportó que después de la última ampliación el variador del transportador se dispara por sobrecorriente varias veces por turno.'],
+      acts: ['Revisamos el histórico de alarmas. Sacamos respaldo del programa en ' + pr + '. Reapretamos borneras en el tablero principal', 'Actualizamos el firmware de ' + eq + '. Ajustamos las rampas del variador. Documentamos los cambios en el programa'],
+      tests: ['Probamos con producto durante un turno completo y no se presentaron alarmas.', 'Hicimos prueba de redundancia abriendo el anillo y la red se recuperó en menos de tres milisegundos.'],
+      diag: ['La causa era un conector de red dañado en el puerto cuatro del switch del tablero principal.', 'El problema era que las rampas de aceleración estaban muy cortas para la nueva carga del transportador.'],
+      sol: ['Cambiamos el conector y certificamos el cable de red.', 'Ajustamos las rampas y el límite de corriente del variador y actualizamos el bloque de control.'],
+      obs: ['El sistema queda operando normal. Queda pendiente programar la actualización de firmware del switch.', 'Queda funcionando sin paradas. Pendiente el cambio del sensor de la estación tres, el repuesto está en camino.'],
+      imp: ['Recomiendo poner el diagnóstico de la red en el HMI para ver las fallas antes de que pare la línea.', 'Sería bueno instalar monitoreo de corriente del variador para anticipar sobrecargas.']
+    };
+    var k = campo || '_', L = B[k] || B._, i = (DEMO_N[k] = (DEMO_N[k] || 0) + 1) - 1;
+    return L[i % L.length];
   }
   window.KisAPI = {
     version: '0.1 · simulada',
