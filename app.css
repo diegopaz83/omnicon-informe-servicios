@@ -282,3 +282,9 @@ label.btn { cursor: pointer; }
 .pendtx { color: var(--warn-ink); }
 .step.has-sug i { position: relative; }
 .step.has-sug i::after { content: ""; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: #2fae5f; box-shadow: 0 0 0 2px var(--bg); }
+.lbl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.lbl-row label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.lnk { border: 0; background: none; padding: 0; color: var(--bright); font-size: 12px; font-weight: 500; cursor: pointer; }
+.hm { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 4px; }
+.hm span { color: var(--muted); font-weight: 600; }
+.hm select.f { padding: 10px 6px; text-align: center; }

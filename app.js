@@ -382,6 +382,17 @@
   function missReq() { return !D.f.d1 ? 0 : !tx(D.f.plant) ? 0 : !tx(D.f.acts) ? 2 : !tx(D.f.obs) ? 3 : -1; }
   function stepDone(k) { var f = D.f; return k === 0 ? !!(f.d1 && tx(f.plant)) : k === 1 ? !!(tx(f.bg) || D.prog.length || D.eq.length) : k === 2 ? !!tx(f.acts) : k === 3 ? !!tx(f.obs) : false; }
   function fcls(k, req) { return ' class="field ' + (tx(D.f[k]) ? 'f-ok' : 'f-empty') + (req ? ' rq' : '') + '"'; }
+  /* Hora con dos listas (hora y minutos) en lugar del reloj nativo de Android, que se corta en algunos teléfonos */
+  function hora(k) {
+    var v = String(D.f[k] || ''), h = v.slice(0, 2), m = v.slice(3, 5), H = [], M = [];
+    for (var i = 0; i < 24; i++) H.push(('0' + i).slice(-2));
+    for (var j = 0; j < 60; j += 5) M.push(('0' + j).slice(-2));
+    if (m && M.indexOf(m) < 0) { M.push(m); M.sort(); }
+    var opt = function (L, cur, ph) { return '<option value="">' + ph + '</option>' + L.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + x + '</option>'; }).join(''); };
+    return '<div' + fcls(k) + '><div class="lbl-row"><label for="f-' + k + '-h">Hora</label><button type="button" class="lnk" data-act="ahora" data-v="' + k + '">Ahora</button></div>' +
+      '<div class="hm"><select class="f" id="f-' + k + '-h" data-hora="' + k + ':h" aria-label="Hora">' + opt(H, h, '--') + '</select><span aria-hidden="true">:</span>' +
+      '<select class="f" data-hora="' + k + ':m" aria-label="Minutos">' + opt(M, m, '--') + '</select></div></div>';
+  }
   function inp(k, label, type, extra, req) { return '<div' + fcls(k, req) + '><label for="f-' + k + '">' + label + (req ? ' <span class="req">*</span>' : '') + '</label><input class="f" id="f-' + k + '" data-f="' + k + '" type="' + (type || 'text') + '" value="' + esc(D.f[k]) + '"' + (extra || '') + '></div>'; }
   function txa(x, rows, req, hideLabel) {
     var k = x[0], mic = VOZ_CAMPOS[k] && VOZ.ok();
@@ -400,7 +411,7 @@
         '<div' + fcls('plant', true) + '><label for="f-plant">Planta <span class="req">*</span></label><select class="f" id="f-plant" data-f="plant"><option value="">Elige la planta</option>' + sites.map(function (p) { return '<option' + (p === D.f.plant ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
         inp('city', 'Ciudad') +
         inp('req', 'Solicitado por', 'text', ' list="dl-req" autocomplete="off"') + '<datalist id="dl-req">' + s.contactos.map(function (c) { return '<option value="' + esc(c.nombre) + '">' + esc(c.cargo) + '</option>'; }).join('') + '</datalist>' +
-        '<div class="g2">' + inp('d1', 'Inicio', 'date', ' max="' + TODAY + '"', true) + inp('h1', 'Hora', 'time') + inp('d2', 'Finalización', 'date', ' max="' + TODAY + '"') + inp('h2', 'Hora', 'time') + '</div>' +
+        '<div class="g2">' + inp('d1', 'Inicio', 'date', ' max="' + TODAY + '"', true) + hora('h1') + inp('d2', 'Finalización', 'date', ' max="' + TODAY + '"') + hora('h2') + '</div>' +
         inp('subj', 'Asunto');
     } else if (k === 1) {
       var sys = function (key, a, b) {
@@ -763,6 +774,7 @@
         if (a !== 'sugno') D.f[fk] = a === 'sugadd' && tx(D.f[fk]) ? D.f[fk].replace(/\s+$/, '') + '\n' + sg.text : sg.text;
         D.sug[fk] = sl.filter(function (x) { return x !== sg; }); if (!D.sug[fk].length) delete D.sug[fk];
         saveDraft(true); render(); if (a !== 'sugno') toast('Sugerencia aplicada · revísala y ajústala si hace falta'); break;
+      case 'ahora': D.f[v] = hm(); saveDraft(); render(); break;
       case 'discardgo': store.set(dKey(S.cur.ceco), null); D = null; closeLayer(); toast('Borrador descartado'); go('s-' + S.cur.ceco); break;
     }
   });
@@ -778,6 +790,12 @@
     var t = e.target;
     if (t.dataset.to && SEND) { SEND.sel[t.dataset.to] = t.checked; return; }
     if (t.id === 'mx' && SEND) { SEND.extra = t.value; return; }
+    if (D && t.dataset.hora) {
+      var hk = t.dataset.hora.split(':'), cur = String(D.f[hk[0]] || ''), hh = cur.slice(0, 2), mm = cur.slice(3, 5);
+      if (hk[1] === 'h') hh = t.value; else mm = t.value;
+      if (hh && !mm) mm = '00';
+      D.f[hk[0]] = hh ? hh + ':' + mm : ''; saveDraft(); render(); return;
+    }
     if (D && t.dataset.f === 'plant') { D.f.plant = t.value; var s = S.cur.sitios.filter(function (x) { return x.planta === t.value; })[0]; if (s) D.f.city = s.ciudad; saveDraft(); render(); return; }
     if (D && t.dataset.photo) {
       var files = Array.prototype.slice.call(t.files || []).slice(0, ISR_MAX - D.photos.length); if (!files.length) return;
