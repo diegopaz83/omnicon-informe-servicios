@@ -1,0 +1,87 @@
+/* Vista del informe de servicio (Ver y Vista previa): documento tipo presentacion, siempre en papel claro */
+.rv { background: #fff; color: #182438; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,28,63,.18); max-width: 900px; margin: 0 auto; width: 100%; }
+.rv-hero { position: relative; min-height: 300px; display: flex; background: #001c3f var(--hero, none) center / cover no-repeat; color: #fff; }
+.rv-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,28,63,.55) 0%, rgba(0,28,63,.25) 40%, rgba(0,28,63,.95) 100%); }
+.rv-hero-in { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 28px 26px; gap: 40px; }
+.rv-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rv-logo { height: 26px; width: auto; }
+.rv-code { background: rgba(255,255,255,.92); color: #001c3f; font-size: 11.5px; font-weight: 600; padding: 4px 12px; border-radius: 999px; }
+.rv-title small { display: block; color: #00dcfa; font-size: 11.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.rv-title h2 { font-size: clamp(22px, 3.4vw, 32px); font-weight: 600; line-height: 1.15; margin: 6px 0; color: #fff; text-wrap: balance; }
+.rv-title p { color: #c9d6e6; font-size: 14px; }
+.rv-hero + .rv-facts { border-top: 3px solid #00dcfa; }
+.rv-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #001c3f; }
+.rv-f { padding: 12px 18px; border-right: 1px solid rgba(201,214,230,.14); min-width: 0; }
+.rv-f:last-child { border-right: 0; }
+.rv-f small { display: block; font-size: 10.5px; color: #00dcfa; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.rv-f b { display: block; color: #fff; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.rv-body { padding: 24px 28px 28px; display: flex; flex-direction: column; gap: 22px; }
+.rv-subj { font-size: 12.5px; color: #556578; }
+.rv-subj b { color: #182438; }
+.rv-s { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.rv-n { width: 34px; height: 34px; border-radius: 9px; background: #0a58eb; color: #fff; font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.rv-c { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.rv-c h3 { font-size: 16px; font-weight: 600; color: #001c3f; padding-top: 5px; }
+.rv-c p, .rv-ul { font-size: 13.5px; line-height: 1.6; color: #24324a; margin: 0; }
+.rv-ul { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.rv-ul li { position: relative; padding-left: 18px; }
+.rv-ul li::before { content: ""; position: absolute; left: 3px; top: .62em; width: 7px; height: 7px; border-radius: 50%; background: #00b8d9; }
+.rv-none { color: #8593a5 !important; font-size: 13px; }
+.rv-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.rv-t { width: 100%; min-width: 0; border-collapse: separate; border-spacing: 0; font-size: 12.5px; border: 1px solid #dbe2ea; border-radius: 10px; overflow: hidden; }
+.rv-t th { background: #001c3f; color: #fff; font-weight: 500; text-align: left; padding: 8px 12px; font-size: 12px; }
+.rv-t td { padding: 8px 12px; border-top: 1px solid #eef2f6; color: #24324a; }
+.rv-t tbody tr:nth-child(even) td { background: #f6f8fb; }
+.rv-gal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }
+.rv-gal figure { margin: 0; background: #f2f5f9; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.rv-gal figure.hero { grid-column: 1 / -1; }
+.rv-gal img { width: 100%; height: auto; max-height: 340px; object-fit: contain; display: block; background: #fff; }
+.rv-gal figure.hero img { max-height: 460px; }
+.rv-gal figcaption { display: flex; gap: 8px; align-items: center; padding: 9px 12px; font-size: 12.5px; color: #24324a; }
+.rv-gal figcaption span { flex: none; width: 22px; height: 22px; border-radius: 6px; background: #0a58eb; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.rv-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.rv-s.rvc { border-radius: 12px; padding: 16px; border-left: 4px solid; }
+.rv-s.diag { background: #fff6e4; border-color: #c49000; }
+.rv-s.sol { background: #e8f7ee; border-color: #3f8f3a; }
+.rv-s.imp { background: #eef3fb; border-color: #0a58eb; }
+.rv-s.diag .rv-n { background: #c49000; } .rv-s.sol .rv-n { background: #3f8f3a; }
+.rv-s.callout { background: #001c3f; border-radius: 12px; padding: 18px; border-left: 4px solid #00dcfa; }
+.rv-s.callout h3 { color: #00dcfa; } .rv-s.callout p, .rv-s.callout .rv-ul { color: #e7eef7; } .rv-s.callout .rv-n { background: #00dcfa; color: #001c3f; }
+.rv-sign { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-end; border-top: 1px solid #eef2f6; padding-top: 18px; }
+.rv-sign > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.rv-sign small { color: #556578; font-size: 12px; }
+.rv-sign b { margin-top: 26px; border-top: 1px solid #182438; padding-top: 5px; min-width: 240px; font-size: 14px; color: #001c3f; }
+.rv-sign span { color: #556578; font-size: 12.5px; }
+.rv-sent { background: #f2f5f9; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; max-width: 360px; }
+.rv-sent small { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #556578; font-weight: 600; }
+@media (max-width: 700px) { .rv-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-f:nth-child(2) { border-right: 0; } .rv-hero-in, .rv-body { padding-left: 18px; padding-right: 18px; } .rv-gal { grid-template-columns: 1fr; } .rv-s { grid-template-columns: 1fr; } }
+
+.rv-who { display: flex; flex-direction: column; gap: 8px; }
+.rv-card { display: flex; gap: 14px; align-items: center; background: #f2f5f9; border-radius: 12px; padding: 12px 18px 12px 12px; border-left: 4px solid #0a58eb; }
+.rv-card img, .rv-ini { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #00dcfa; }
+.rv-ini { background: #001c3f; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 18px; }
+.rv-card > div { display: flex; flex-direction: column; gap: 1px; }
+.rv-card b { margin: 0 !important; border: 0 !important; padding: 0 !important; min-width: 0 !important; font-size: 15px; color: #001c3f; }
+.rv-card span { font-size: 13px; color: #24324a; }
+.rv-card em { font-style: normal; font-size: 11.5px; color: #556578; }
+
+/* Secciones 5 a 8: encabezado del color dominante y cuerpo claro; Observaciones oscura con titulo cian */
+.rv-pair { align-items: stretch; }
+.rv-k { border-radius: 12px; overflow: hidden; border: 1px solid var(--kb); display: flex; flex-direction: column; }
+.rv-k h3 { margin: 0; display: flex; gap: 10px; align-items: center; background: var(--kh); color: var(--kt, #fff); font-size: 15px; font-weight: 600; padding: 10px 14px; }
+.rv-k h3 span { background: rgba(255,255,255,.22); border-radius: 7px; padding: 2px 8px; font-size: 12.5px; }
+.rv-k > div { flex: 1; background: var(--ks); padding: 12px 16px; }
+.rv-k p, .rv-k .rv-ul { color: var(--kc, #24324a); }
+.rv-k.diag { --kh: #c49000; --ks: #fff6e4; --kb: #f0dca8; }
+.rv-k.sol { --kh: #3f8f3a; --ks: #e8f7ee; --kb: #bfe3c9; }
+.rv-k.imp { --kh: #0a58eb; --ks: #eef3fb; --kb: #c8d8f7; }
+.rv-k.obs { --kh: #00142e; --ks: #00285a; --kb: #00285a; --kt: #00dcfa; --kc: #e7eef7; }
+.rv-k.obs h3 span { background: rgba(0,220,250,.18); }
+
+.rv-card { background: none !important; border: 0 !important; padding: 4px 0 0 !important; }
+.rv-card span.co { color: #24324a; }
+.rv-card em { margin-top: 2px; }
+.rv-sent { gap: 8px !important; padding: 12px 16px !important; min-width: 240px; }
+.rv-rc { display: flex; flex-direction: column; line-height: 1.3; }
+.rv-rc b { font-size: 13.5px; color: #001c3f; font-weight: 600; margin: 0 !important; border: 0 !important; padding: 0 !important; min-width: 0 !important; }
+.rv-rc span { font-size: 12px; color: #24324a; }
