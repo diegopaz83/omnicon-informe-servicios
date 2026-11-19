@@ -139,7 +139,7 @@
     var on = navigator.onLine !== false;
     return '<header class="top">' + (back ? '<button class="back" data-act="back" aria-label="Volver">' + ic('i-back') + '</button>' : '<img class="logo" src="' + LOGO + '" alt="Omnicon">') +
       '<div class="ttl"><small>' + esc(sub) + '</small><b>' + esc(title) + '</b></div>' +
-      '<span class="net' + (on ? '' : ' off') + '" id="net"><i></i>' + (on ? 'En línea' : 'Sin conexión') + '</span>' +
+      '<span class="net off" id="net"' + (on ? ' hidden' : '') + '><i></i>Sin conexión</span>' +
       '<button class="me" data-act="menu" aria-label="Menú de ' + esc(S.me.nombre) + '">' + (FOTOS[slug(S.me.nombre)] ? '<img src="' + FOTOS[slug(S.me.nombre)] + '" alt="">' : esc(initials(S.me.nombre))) + '</button></header>';
   }
   function render() {
@@ -618,7 +618,7 @@
     }
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && LAYER) closeLayer(); });
-  function net() { var n = $('net'); if (!n) return; var on = navigator.onLine !== false; n.className = 'net' + (on ? '' : ' off'); n.innerHTML = '<i></i>' + (on ? 'En línea' : 'Sin conexión'); if (!on) toast('Sin conexión: sigue escribiendo, el borrador se guarda en el celular'); }
+  function net() { var on = navigator.onLine !== false, n = $('net'); if (n) n.hidden = on; if (!on) toast('Sin conexión: sigue escribiendo, el borrador se guarda en el celular'); }
   window.addEventListener('online', net); window.addEventListener('offline', net);
 
   /* ---------- Arranque ---------- */
