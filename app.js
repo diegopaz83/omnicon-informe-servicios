@@ -403,16 +403,10 @@
   function missReq() { return !D.f.d1 ? 0 : !tx(D.f.plant) ? 0 : !tx(D.f.acts) ? 2 : !tx(D.f.obs) ? 3 : -1; }
   function stepDone(k) { var f = D.f; return k === 0 ? !!(f.d1 && tx(f.plant)) : k === 1 ? !!(tx(f.bg) || D.prog.length || D.eq.length) : k === 2 ? !!tx(f.acts) : k === 3 ? !!tx(f.obs) : false; }
   function fcls(k, req) { return ' class="field ' + (tx(D.f[k]) ? 'f-ok' : 'f-empty') + (req ? ' rq' : '') + '"'; }
-  /* Hora con dos listas (hora y minutos) en lugar del reloj nativo de Android, que se corta en algunos teléfonos */
+  /* Hora con el selector nativo del teléfono, más un atajo "Ahora" */
   function hora(k) {
-    var v = String(D.f[k] || ''), h = v.slice(0, 2), m = v.slice(3, 5), H = [], M = [];
-    for (var i = 0; i < 24; i++) H.push(('0' + i).slice(-2));
-    for (var j = 0; j < 60; j += 5) M.push(('0' + j).slice(-2));
-    if (m && M.indexOf(m) < 0) { M.push(m); M.sort(); }
-    var opt = function (L, cur, ph) { return '<option value="">' + ph + '</option>' + L.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + x + '</option>'; }).join(''); };
-    return '<div' + fcls(k) + '><div class="lbl-row"><label for="f-' + k + '-h">Hora</label><button type="button" class="lnk" data-act="ahora" data-v="' + k + '">Ahora</button></div>' +
-      '<div class="hm"><select class="f" id="f-' + k + '-h" data-hora="' + k + ':h" aria-label="Hora">' + opt(H, h, '--') + '</select><span aria-hidden="true">:</span>' +
-      '<select class="f" data-hora="' + k + ':m" aria-label="Minutos">' + opt(M, m, '--') + '</select></div></div>';
+    return '<div' + fcls(k) + '><div class="lbl-row"><label for="f-' + k + '">Hora</label><button type="button" class="lnk" data-act="ahora" data-v="' + k + '">Ahora</button></div>' +
+      '<input class="f" id="f-' + k + '" data-f="' + k + '" type="time" value="' + esc(D.f[k]) + '"></div>';
   }
   function inp(k, label, type, extra, req) { return '<div' + fcls(k, req) + '><label for="f-' + k + '">' + label + (req ? ' <span class="req">*</span>' : '') + '</label><input class="f" id="f-' + k + '" data-f="' + k + '" type="' + (type || 'text') + '" value="' + esc(D.f[k]) + '"' + (extra || '') + '></div>'; }
   function txa(x, rows, req, hideLabel) {
