@@ -111,6 +111,141 @@
   function asInforme(d) { return { n: S.infs.length ? S.infs[S.infs.length - 1].n + 1 : 1, at: TODAY, by: S.me.nombre, role: S.me.cargo, f: JSON.parse(JSON.stringify(d.f)), prog: d.prog.filter(function (r) { return r.n; }), eq: d.eq.filter(function (r) { return r.n; }), photos: JSON.parse(JSON.stringify(d.photos)), sent: [] }; }
   function P(svc) { return { name: svc.nombre, code: svc.ceco, clientName: svc.odoo.cliente }; }
 
+  /* ---------- Notas de voz + interpretación (IA simulada en KisAPI.interpretarNota) ----------
+     Audio: MediaRecorder (se guarda en el dispositivo, IndexedDB). Texto: dictado de claude.ai
+     dentro del artefacto, o Web Speech API del navegador (Chrome/Android) fuera de él. */
+  var VOZ_CAMPOS = { bg: 'Antecedentes', acts: 'Actividades', tests: 'Pruebas realizadas', diag: 'Diagnóstico', sol: 'Solución', obs: 'Observaciones y conclusiones', imp: 'Oportunidades de mejora' };
+  var VOZ_PASO = { bg: 1, acts: 2, tests: 3, diag: 3, sol: 3, obs: 3, imp: 3 };
+  var VOZ_MAX = 180;
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var DICT = null;
+  var VOZ = { ok: function () { return !!(DICT || SR || (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)); } };
+  var REC = { on: false, campo: null, t0: 0, tick: null, finals: '', partial: '', mr: null, chunks: [], stream: null, rec: null, via: null };
+  try {
+    if (window.claude && window.claude.use) window.claude.use('dictation').then(function (d) {
+      if (!d) return; DICT = d;
+      d.onPartial(function (e) { if (REC.on && REC.via === 'dict') { REC.partial = e.text; recPaint(); } });
+      d.onFinal(function (e) { if (REC.on || REC.via === 'dict') { REC.finals += REC.finals ? e.text : e.text.replace(/^\s+/, ''); REC.partial = ''; recPaint(); } });
+      if (S.view === 'edit') render();
+    }, function () {});
+  } catch (e) {}
+  function mmss(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+  function recBar() {
+    return '<div class="recbar" role="status"><span class="dot" aria-hidden="true"></span><b id="recT">' + mmss((Date.now() - REC.t0) / 1000) + '</b>' +
+      '<span class="rec-live" id="recP">' + (esc(REC.finals + (REC.partial ? ' ' + REC.partial : '')) || 'Escuchando… habla con naturalidad') + '</span>' +
+      '<div class="rec-acts"><button type="button" class="btn sm" data-act="reccancel">Cancelar</button><button type="button" class="btn sm primary" data-act="recstop">' + ic('i-stop') + 'Detener</button></div></div>';
+  }
+  function recPaint() {
+    var t = $('recT'), p = $('recP'); if (!REC.on) return;
+    var sec = (Date.now() - REC.t0) / 1000;
+    if (t) t.textContent = mmss(sec) + ' / ' + mmss(VOZ_MAX);
+    if (p) p.textContent = (REC.finals + (REC.partial ? ' ' + REC.partial : '')) || 'Escuchando… habla con naturalidad';
+    if (sec >= VOZ_MAX) { recStop(false); toast('Se alcanzó el máximo de 3 minutos por nota'); }
+  }
+  function recStart(campo) {
+    if (REC.on) { toast('Ya hay una grabación en curso'); return; }
+    REC = { on: true, campo: campo, t0: Date.now(), tick: null, finals: '', partial: '', mr: null, chunks: [], stream: null, rec: null, via: null };
+    /* El dictado debe arrancar en el mismo clic, antes de cualquier await */
+    if (DICT) {
+      REC.via = 'dict';
+      DICT.start().catch(function (er) {
+        REC.via = null;
+        if (er && er.code === 'not_granted') toast('Sin permiso para dictar: la nota se guarda solo como audio');
+      });
+    } else if (SR) {
+      try {
+        var r = new SR(); r.lang = 'es-CO'; r.continuous = true; r.interimResults = true;
+        r.onresult = function (e) { var part = ''; for (var i = e.resultIndex; i < e.results.length; i++) { if (e.results[i].isFinal) REC.finals += (REC.finals ? ' ' : '') + e.results[i][0].transcript.trim(); else part += e.results[i][0].transcript; } REC.partial = part; recPaint(); };
+        r.onerror = function () {}; r.onend = function () { if (REC.on && REC.rec === r) { try { r.start(); } catch (x) {} } };
+        r.start(); REC.rec = r; REC.via = 'web';
+      } catch (e) { REC.rec = null; }
+    }
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) {
+      var mine = REC;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
+        if (REC !== mine || !REC.on) { st.getTracks().forEach(function (t) { t.stop(); }); return; }
+        REC.stream = st;
+        try { var mr = new MediaRecorder(st); mr.ondataavailable = function (e) { if (e.data && e.data.size) mine.chunks.push(e.data); }; mr.start(); REC.mr = mr; } catch (e) {}
+      }, function () { if (REC === mine && !REC.via) { toast('No hay acceso al micrófono en esta vista'); recStop(true); } });
+    } else if (!REC.via) { REC.on = false; toast('Este navegador no permite grabar notas de voz'); return; }
+    REC.tick = setInterval(recPaint, 500);
+    render();
+  }
+  function recStop(cancel) {
+    if (!REC.on) return;
+    var r = REC; r.on = false; clearInterval(r.tick);
+    var dur = Math.round((Date.now() - r.t0) / 1000);
+    var waits = [];
+    if (r.via === 'dict' && DICT) waits.push(DICT.stop().catch(function () {}));
+    if (r.rec) { var rr = r.rec; r.rec = null; waits.push(new Promise(function (ok) { rr.onend = ok; try { rr.stop(); } catch (e) { ok(); } setTimeout(ok, 1500); })); }
+    if (r.mr && r.mr.state !== 'inactive') waits.push(new Promise(function (ok) { r.mr.onstop = ok; try { r.mr.stop(); } catch (e) { ok(); } }));
+    Promise.all(waits).then(function () {
+      if (r.stream) r.stream.getTracks().forEach(function (t) { t.stop(); });
+      r.via = null;
+      if (cancel) { render(); toast('Grabación cancelada'); return; }
+      var text = tx(r.finals + (r.partial ? ' ' + r.partial : ''));
+      var id = 'aud-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      var note = { id: id, campo: r.campo, at: new Date().toISOString(), dur: dur, text: text, audio: false, st: 'pend' };
+      var finish = function () {
+        if (!D) return; (D.notes = D.notes || []).push(note); saveDraft(true);
+        if (navigator.onLine !== false) interpretar(id); else { render(); toast('Nota guardada en el celular. Se interpreta cuando vuelva la conexión.'); }
+      };
+      if (r.chunks.length) {
+        var fr = new FileReader(); fr.onload = function () { photoPut(id, fr.result); note.audio = true; finish(); }; fr.onerror = finish;
+        fr.readAsDataURL(new Blob(r.chunks, { type: r.chunks[0].type || 'audio/webm' }));
+      } else finish();
+    });
+    render();
+  }
+  function interpretar(id) {
+    var n = (D && D.notes || []).filter(function (x) { return x.id === id; })[0]; if (!n || n.st === 'run') return;
+    if (navigator.onLine === false) { toast('Sin conexión: la nota queda guardada para interpretarla después'); return; }
+    n.st = 'run'; render();
+    var ceco = S.cur.ceco;
+    API.interpretarNota(ceco, { campo: n.campo, texto: n.text, duracion: n.dur }).then(function (r) {
+      if (!D || !S.cur || S.cur.ceco !== ceco) return;
+      n.st = 'ok'; n.sim = !!r.simulada; if (!n.text && r.transcripcion) { n.text = r.transcripcion; n.textSim = true; }
+      D.sug = D.sug || {}; var ks = [];
+      Object.keys(r.sugerencias || {}).forEach(function (k) { var t = tx(r.sugerencias[k]); if (t && VOZ_CAMPOS[k]) { D.sug[k] = { text: t, nota: id }; ks.push(k); } });
+      saveDraft(true); render();
+      toast(ks.length ? 'Sugerencias listas en ' + ks.length + (ks.length === 1 ? ' campo' : ' campos') : 'No se encontró contenido para sugerir');
+    }, function () { n.st = 'pend'; saveDraft(true); render(); toast('No se pudo interpretar la nota; queda guardada'); });
+  }
+  function sugCard(k) {
+    var sg = D.sug && D.sug[k]; if (!sg) return '';
+    var full = !!tx(D.f[k]);
+    return '<div class="sug" role="region" aria-label="Sugerencia para ' + esc(VOZ_CAMPOS[k]) + '"><div class="sug-h">' + ic('i-spark') + '<b>Sugerencia a partir de tu nota de voz</b><span class="sim">IA simulada</span></div>' +
+      '<p>' + esc(sg.text) + '</p><div class="sug-a"><button type="button" class="btn sm" data-act="sugno" data-v="' + k + '">Descartar</button>' +
+      (full ? '<button type="button" class="btn sm" data-act="sugadd" data-v="' + k + '">Agregar al final</button><button type="button" class="btn sm primary" data-act="sugusar" data-v="' + k + '">Reemplazar</button>' : '<button type="button" class="btn sm primary" data-act="sugusar" data-v="' + k + '">' + ic('i-check') + 'Usar</button>') + '</div></div>';
+  }
+  function vozCard() {
+    if (!VOZ.ok() && !(D.notes || []).length) return '';
+    var notes = D.notes || [], k = D.step;
+    var pend = Object.keys(D.sug || {}).filter(function (x) { return VOZ_PASO[x] !== k; });
+    var rows = notes.slice().reverse().map(function (n) {
+      var st = n.st === 'run' ? '<span class="chip run">Interpretando…</span>' : n.st === 'ok' ? '<span class="chip ok">Interpretada</span>' : '<span class="chip pend">Pendiente</span>';
+      var d = new Date(n.at);
+      return '<div class="nota"><div class="nota-h">' + ic('i-mic') + '<b>' + (n.campo ? esc(VOZ_CAMPOS[n.campo]) : 'Informe completo') + '</b><span class="hint">' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' · ' + mmss(n.dur) + '</span>' + st + '</div>' +
+        (n.audio ? '<audio controls preload="none" data-aud="' + n.id + '"></audio>' : '') +
+        (n.text ? '<details><summary>Transcripción' + (n.textSim ? ' (simulada)' : '') + '</summary><p>' + esc(n.text) + '</p></details>' : '') +
+        '<div class="nota-a">' + (n.st === 'pend' ? '<button type="button" class="btn sm" data-act="notaint" data-v="' + n.id + '">' + ic('i-spark') + 'Interpretar</button>' : '') +
+        '<button type="button" class="btn sm ghost" data-act="notadel" data-v="' + n.id + '" aria-label="Eliminar nota">' + ic('i-trash') + 'Eliminar</button></div></div>';
+    }).join('');
+    return '<div class="voz"><div class="voz-h">' + ic('i-mic') + '<div><b>Notas de voz</b><span class="hint">Cuenta el servicio de corrido: la IA reparte lo que digas entre los campos y tú decides qué usar.</span></div></div>' +
+      (REC.on && !REC.campo ? recBar() : VOZ.ok() ? '<button type="button" class="btn primary block" data-act="dictar"' + (REC.on ? ' disabled' : '') + '>' + ic('i-mic') + 'Dictar informe</button>' : '') +
+      (pend.length ? '<div class="voz-pend"><span class="hint">Sugerencias por revisar:</span>' + [1, 2, 3].filter(function (st) { return st !== k && pend.some(function (x) { return VOZ_PASO[x] === st; }); }).map(function (st) { var ks = pend.filter(function (x) { return VOZ_PASO[x] === st; }); return '<button type="button" class="chip link" data-act="step" data-v="' + st + '" title="' + esc(ks.map(function (x) { return VOZ_CAMPOS[x]; }).join(', ')) + '">Paso ' + (st + 1) + ' · ' + STEPS[st][0] + ' (' + ks.length + ')</button>'; }).join('') + '</div>' : '') +
+      (notes.length ? '<details class="notas"' + (notes.some(function (n) { return n.st !== 'ok'; }) ? ' open' : '') + '><summary>' + notes.length + (notes.length === 1 ? ' nota guardada' : ' notas guardadas') + ' en este borrador</summary>' + rows + '</details>' : '') + '</div>';
+  }
+  function paintAudio() {
+    var els = document.querySelectorAll('audio[data-aud]'); if (!els.length) return;
+    photoGet(Array.prototype.map.call(els, function (e) { return e.dataset.aud; }), function (m) {
+      Array.prototype.forEach.call(document.querySelectorAll('audio[data-aud]'), function (e) { if (m[e.dataset.aud]) { e.src = m[e.dataset.aud]; e.removeAttribute('data-aud'); } else e.hidden = true; });
+    });
+  }
+  window.addEventListener('online', function () {
+    if (!D || !D.notes) return; D.notes.filter(function (n) { return n.st === 'pend'; }).forEach(function (n) { interpretar(n.id); });
+  });
+
   /* ---------- Rutas (hash): #inicio · #s-CECO · #c-CECO · #e-CECO ---------- */
   function route() {
     if (!S.me) { S.view = 'login'; render(); return; }
@@ -148,7 +283,7 @@
     else if (S.view === 'home') h = top('Mis servicios', 'Kairos · Informes', false) + '<main>' + homeView() + '</main>';
     else if (S.view === 'svc') h = top(S.cur ? S.cur.nombre : 'Servicio', S.cur ? S.cur.ceco : 'Cargando…', true) + '<main>' + (S.loading || !S.cur ? '<div class="spin" role="status" aria-label="Cargando"></div>' : svcView()) + '</main>';
     else if (S.view === 'edit') h = top('Informe de servicio #' + (S.infs.length ? S.infs[S.infs.length - 1].n + 1 : 1), S.cur.ceco + ' · borrador', true) + editView();
-    app.innerHTML = h; paintPhotos();
+    app.innerHTML = h; paintPhotos(); paintAudio();
   }
 
   /* Entrada: simula el inicio de sesión con Microsoft Entra ID */
@@ -229,9 +364,17 @@
   /* ---------- Editor por pasos ---------- */
   var STEPS = [['Servicio', 'Información del servicio'], ['Sistema', 'Situación y sistema'], ['Actividades', 'Actividades y fotos'], ['Resultados', 'Pruebas, diagnóstico y cierre'], ['Emitir', 'Revisar y emitir']];
   function tx(s) { return String(s || '').trim(); }
+  function missReq() { return !D.f.d1 ? 0 : !tx(D.f.plant) ? 0 : !tx(D.f.acts) ? 2 : !tx(D.f.obs) ? 3 : -1; }
   function stepDone(k) { var f = D.f; return k === 0 ? !!(f.d1 && tx(f.plant)) : k === 1 ? !!(tx(f.bg) || D.prog.length || D.eq.length) : k === 2 ? !!tx(f.acts) : k === 3 ? !!tx(f.obs) : false; }
-  function inp(k, label, type, extra, req) { return '<div class="field"><label for="f-' + k + '">' + label + (req ? ' <span class="req">*</span>' : '') + '</label><input class="f" id="f-' + k + '" data-f="' + k + '" type="' + (type || 'text') + '" value="' + esc(D.f[k]) + '"' + (extra || '') + '></div>'; }
-  function txa(x, rows, req, hideLabel) { return '<div class="field"><label for="f-' + x[0] + '"' + (hideLabel ? ' class="sr"' : '') + '>' + x[1] + (req ? ' <span class="req">*</span>' : '') + '</label><textarea class="f" id="f-' + x[0] + '" data-f="' + x[0] + '" rows="' + (rows || 4) + '" placeholder="' + esc(x[2]) + '">' + esc(D.f[x[0]]) + '</textarea></div>'; }
+  function fcls(k, req) { return ' class="field ' + (tx(D.f[k]) ? 'f-ok' : 'f-empty') + (req ? ' rq' : '') + '"'; }
+  function inp(k, label, type, extra, req) { return '<div' + fcls(k, req) + '><label for="f-' + k + '">' + label + (req ? ' <span class="req">*</span>' : '') + '</label><input class="f" id="f-' + k + '" data-f="' + k + '" type="' + (type || 'text') + '" value="' + esc(D.f[k]) + '"' + (extra || '') + '></div>'; }
+  function txa(x, rows, req, hideLabel) {
+    var k = x[0], mic = VOZ_CAMPOS[k] && VOZ.ok();
+    return '<div' + fcls(k, req) + ' data-fw="' + k + '"><label for="f-' + k + '"' + (hideLabel ? ' class="sr"' : '') + '>' + x[1] + (req ? ' <span class="req">*</span>' : '') + '</label>' +
+      '<div class="fw' + (mic ? ' has-mic' : '') + '"><textarea class="f" id="f-' + k + '" data-f="' + k + '" rows="' + (rows || 4) + '" placeholder="' + esc(x[2]) + '">' + esc(D.f[k]) + '</textarea>' +
+      (mic ? '<button type="button" class="mic' + (REC.on && REC.campo === k ? ' on' : '') + '" data-act="mic" data-v="' + k + '" title="Grabar nota de voz para este campo" aria-label="Grabar nota de voz: ' + esc(VOZ_CAMPOS[k]) + '">' + ic('i-mic') + '</button>' : '') + '</div>' +
+      (REC.on && REC.campo === k ? recBar() : '') + sugCard(k) + '</div>';
+  }
   function editView() {
     var s = S.cur, k = D.step;
     var steps = '<nav class="steps" aria-label="Pasos">' + STEPS.map(function (x, i) { return '<button class="step' + (stepDone(i) ? ' done' : '') + '" data-act="step" data-v="' + i + '"' + (i === k ? ' aria-current="step"' : '') + '><i>' + (stepDone(i) && i !== k ? '✓' : i + 1) + '</i><span>' + x[0] + '</span></button>'; }).join('') + '</nav>';
@@ -249,16 +392,16 @@
         return '<div class="field"><span class="lb">' + a + 's</span><div class="sys">' + (D[key].length ? D[key].map(function (r, i) { return '<div class="sys-r"><input class="f" data-sys="' + key + ':' + i + ':n" value="' + esc(r.n) + '" placeholder="' + a + '" aria-label="' + a + ' ' + (i + 1) + '"><input class="f" data-sys="' + key + ':' + i + ':v" value="' + esc(r.v) + '" placeholder="' + b + '" aria-label="' + b + ' ' + (i + 1) + '"><button class="x" data-act="sysrm" data-v="' + key + ':' + i + '" aria-label="Quitar">' + ic('i-x') + '</button></div>'; }).join('') : '<span class="hint">Sin registros.</span>') +
           '<button class="btn sm" data-act="sysadd" data-v="' + key + '" style="align-self:flex-start">' + ic('i-plus') + 'Agregar ' + a.toLowerCase() + '</button></div></div>';
       };
-      body = '<h3 class="sec-t">Generalidades</h3>' + txa(ISF[0], 5) +
+      body = vozCard() + '<h3 class="sec-t">Generalidades</h3>' + txa(ISF[0], 5) +
         '<h3 class="sec-t">Descripción del sistema</h3><span class="hint">Viene del último informe de este servicio. Ajusta lo que haya cambiado.</span>' + sys('prog', 'Programa', 'Versión') + sys('eq', 'Equipo', 'Firmware') + txa(ISF[1], 3);
     } else if (k === 2) {
-      body = '<h3 class="sec-t">Actividades</h3>' + txa(ISF[2], 7, true) +
+      body = vozCard() + '<h3 class="sec-t">Actividades</h3>' + txa(ISF[2], 7, true) +
         '<h3 class="sec-t">Registro fotográfico</h3><div class="ph-grid">' + D.photos.map(function (ph, i) { return '<figure class="ph">' + phImg(ph, 'Foto ' + (i + 1)) + '<span class="num">' + (i + 1) + '</span><input class="f" data-cap="' + ph.id + '" value="' + esc(ph.cap) + '" placeholder="Pie de foto" aria-label="Pie de foto ' + (i + 1) + '"><button class="x" data-act="phrm" data-v="' + ph.id + '" aria-label="Quitar foto ' + (i + 1) + '">' + ic('i-x') + '</button></figure>'; }).join('') + '</div>' +
         (D.photos.length < ISR_MAX ? '<div class="photo-acts"><label class="btn primary">' + ic('i-cam') + 'Tomar foto<input type="file" accept="image/*" capture="environment" data-photo="1" hidden></label><label class="btn">' + ic('i-image') + 'Subir fotos<input type="file" accept="image/*" multiple data-photo="1" hidden></label></div>' : '') +
         '<span class="hint">' + D.photos.length + ' de ' + ISR_MAX + ' figuras · fotos o pantallazos; se comprimen al subirlas y salen completas en el PDF.</span>';
     } else if (k === 3) {
-      body = '<h3 class="sec-t">Pruebas realizadas</h3>' + txa(ISF[3], 4, false, true) + '<h3 class="sec-t">Diagnóstico</h3>' + txa(ISF[4], 3, false, true) + '<h3 class="sec-t">Solución</h3>' + txa(ISF[5], 3, false, true) +
-        '<h3 class="sec-t">Observaciones y conclusiones <span class="req">*</span></h3>' + txa(ISF[6], 4, false, true) + '<h3 class="sec-t">Oportunidades de mejora</h3>' + txa(ISF[7], 3, false, true);
+      body = vozCard() + '<h3 class="sec-t">Pruebas realizadas</h3>' + txa(ISF[3], 4, false, true) + '<h3 class="sec-t">Diagnóstico</h3>' + txa(ISF[4], 3, false, true) + '<h3 class="sec-t">Solución</h3>' + txa(ISF[5], 3, false, true) +
+        '<h3 class="sec-t">Observaciones y conclusiones <span class="req">*</span></h3>' + txa(ISF[6], 4, true, true) + '<h3 class="sec-t">Oportunidades de mejora</h3>' + txa(ISF[7], 3, false, true);
     } else {
       var f = D.f, C = [[!!f.d1, 'Fecha de inicio', 0, 1], [!!tx(f.plant), 'Planta', 0, 1], [!!tx(f.acts), 'Actividades realizadas', 2, 1], [!!tx(f.obs), 'Observaciones y conclusiones', 3, 1],
         [!!tx(f.req), 'Quién solicitó el servicio', 0], [!!tx(f.bg), 'Antecedentes', 1], [D.photos.length > 0, 'Al menos una foto', 2], [!!(tx(f.diag) && tx(f.sol)), 'Diagnóstico y solución', 3]];
@@ -266,7 +409,8 @@
       body = '<div class="banner' + (miss ? ' warn' : ' ok') + '">' + ic(miss ? 'i-alert' : 'i-check') + '<div>' + (miss ? 'Faltan ' + miss + (miss === 1 ? ' dato obligatorio' : ' datos obligatorios') + ' para emitir.' : 'Listo para emitir. Al emitir, el informe queda en el histórico a tu nombre y no se puede cambiar.') + '</div></div>' +
         '<div class="checks">' + C.map(function (c) { return '<div class="chk' + (c[0] ? '' : ' no') + '">' + ic(c[0] ? 'i-check' : 'i-alert') + '<span>' + c[1] + (c[3] ? '' : ' <span class="hint">· recomendado</span>') + '</span>' + (c[0] ? '' : '<button class="btn sm" data-act="step" data-v="' + c[2] + '">Completar</button>') + '</div>'; }).join('') + '</div>' +
         '<div class="field"><span class="lb">Firma</span><div class="pp">' + av(S.me.nombre) + '<div><b>' + esc(S.me.nombre) + '</b><span>' + esc(S.me.cargo) + ' · Omnicon S.A.S. El cliente no firma; el envío queda registrado.</span></div></div></div>' +
-        '<div class="g2"><button class="btn" data-act="preview">' + ic('i-eye') + 'Vista previa</button>' + (DLst !== 'none' ? '<button class="btn" data-act="pdfdraft">' + ic('i-pdf') + 'PDF borrador</button>' : '<span></span>') + '</div>' +
+        '<div class="g2"><button class="btn" data-act="preview">' + ic('i-eye') + 'Vista previa</button>' + (DLst !== 'none' ? '<button class="btn" data-act="pdfdraft"' + (miss ? ' disabled title="Completa los datos obligatorios para descargar el PDF"' : '') + '>' + ic('i-pdf') + 'PDF borrador</button>' : '<span></span>') + '</div>' +
+        (miss && DLst !== 'none' ? '<span class="hint">El PDF se habilita cuando estén completos los datos obligatorios.</span>' : '') +
         '<button class="btn" data-act="discard" style="color:var(--err-ink)">Descartar borrador</button>';
     }
     var bar = '<div class="bar"><div class="bar-in">' + (k > 0 ? '<button class="btn" data-act="step" data-v="' + (k - 1) + '">' + ic('i-back') + 'Atrás</button>' : '<button class="btn" data-act="back">Salir</button>') +
@@ -510,7 +654,7 @@
   }
   function previewSheet() {
     return sheet('Vista previa · borrador', 'Así lo recibe el cliente. Revisa antes de emitir.', isrDoc(P(S.cur), asInforme(D), true),
-      '<button class="btn" data-act="close">Seguir editando</button>' + (DLst !== 'none' ? '<button class="btn" data-act="pdfdraft">' + ic('i-pdf') + 'PDF borrador</button>' : ''), true);
+      '<button class="btn" data-act="close">Seguir editando</button>' + (DLst !== 'none' ? '<button class="btn" data-act="pdfdraft"' + (missReq() >= 0 ? ' disabled title="Completa los datos obligatorios para descargar el PDF"' : '') + '>' + ic('i-pdf') + 'PDF borrador</button>' : ''), true);
   }
   var SEND = null;
   function sendInit(mode, n) {
@@ -575,17 +719,17 @@
       case 'reset': closeLayer(); API.reset().then(function () { Object.keys(localStorage).forEach(function (k) { if (k.indexOf('kis.draft.') === 0) store.set(k, null); }); S.svcs = []; S.cur = null; toast('Datos de ejemplo restablecidos'); go('inicio'); }); break;
       case 'close': closeLayer(); break;
       case 'back':
-        if (S.view === 'edit') { saveDraft(true); go('s-' + S.cur.ceco); } else go('inicio'); break;
+        if (S.view === 'edit') { if (REC.on) recStop(true); saveDraft(true); go('s-' + S.cur.ceco); } else go('inicio'); break;
       case 'filter': S.filter = v; render(); break;
       case 'open': go('s-' + v); break;
       case 'tab': go((v === 'car' ? 'c-' : 's-') + S.cur.ceco); break;
       case 'view': layer(function () { return viewSheet(+v); }); break;
       case 'pdf': isrPdf(P(S.cur), S.infs.filter(function (x) { return x.n === +v; })[0], false); break;
-      case 'pdfdraft': isrPdf(P(S.cur), asInforme(D), true); break;
+      case 'pdfdraft': if (missReq() >= 0) { toast('Completa los datos obligatorios antes de descargar el PDF'); break; } isrPdf(P(S.cur), asInforme(D), true); break;
       case 'preview': layer(previewSheet); break;
       case 'resend': sendInit('resend', +v); layer(sendSheet); break;
       case 'emit':
-        var miss = !D.f.d1 ? 0 : !tx(D.f.plant) ? 0 : !tx(D.f.acts) ? 2 : !tx(D.f.obs) ? 3 : -1;
+        var miss = missReq();
         if (miss >= 0) { D.step = 4; render(); toast('Completa los datos obligatorios antes de emitir'); break; }
         sendInit('new'); layer(sendSheet); break;
       case 'sendgo': sendGo(); break;
@@ -594,6 +738,15 @@
       case 'sysrm': var kk = v.split(':'); D[kk[0]].splice(+kk[1], 1); saveDraft(); render(); break;
       case 'phrm': D.photos = D.photos.filter(function (x) { return x.id !== v; }); saveDraft(); render(); break;
       case 'discard': layer(function () { return sheet('¿Descartar el borrador?', '', '<p>Se pierden los textos y las fotos de este borrador. No se puede deshacer.</p>', '<button class="btn" data-act="close">Cancelar</button><button class="btn primary" data-act="discardgo" style="background:var(--err-ink);border-color:var(--err-ink)">Descartar</button>'); }); break;
+      case 'mic': case 'dictar': recStart(a === 'dictar' ? null : v); break;
+      case 'recstop': recStop(false); break;
+      case 'reccancel': recStop(true); break;
+      case 'notaint': interpretar(v); break;
+      case 'notadel': D.notes = (D.notes || []).filter(function (x) { return x.id !== v; }); saveDraft(true); render(); break;
+      case 'sugusar': case 'sugadd':
+        var sg = D.sug && D.sug[v]; if (!sg) break;
+        D.f[v] = a === 'sugadd' && tx(D.f[v]) ? D.f[v].replace(/\s+$/, '') + '\n' + sg.text : sg.text; delete D.sug[v]; saveDraft(true); render(); toast('Sugerencia aplicada · revísala y ajústala si hace falta'); break;
+      case 'sugno': if (D.sug) delete D.sug[v]; saveDraft(true); render(); break;
       case 'discardgo': store.set(dKey(S.cur.ceco), null); D = null; closeLayer(); toast('Borrador descartado'); go('s-' + S.cur.ceco); break;
     }
   });
@@ -601,7 +754,7 @@
     var t = e.target;
     if (t.id === 'q') { S.q = t.value; var pos = t.selectionStart; render(); var q = $('q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } return; }
     if (!D) return;
-    if (t.dataset.f) { D.f[t.dataset.f] = t.value; saveDraft(); }
+    if (t.dataset.f) { D.f[t.dataset.f] = t.value; saveDraft(); var fw = t.closest('.field'); if (fw) { fw.classList.toggle('f-ok', !!tx(t.value)); fw.classList.toggle('f-empty', !tx(t.value)); } }
     else if (t.dataset.sys) { var k = t.dataset.sys.split(':'); D[k[0]][+k[1]][k[2]] = t.value; saveDraft(); }
     else if (t.dataset.cap) { D.photos.forEach(function (p) { if (p.id === t.dataset.cap) p.cap = t.value; }); saveDraft(); }
   });
@@ -609,7 +762,7 @@
     var t = e.target;
     if (t.dataset.to && SEND) { SEND.sel[t.dataset.to] = t.checked; return; }
     if (t.id === 'mx' && SEND) { SEND.extra = t.value; return; }
-    if (D && t.dataset.f === 'plant') { var s = S.cur.sitios.filter(function (x) { return x.planta === t.value; })[0]; if (s) D.f.city = s.ciudad; saveDraft(); render(); return; }
+    if (D && t.dataset.f === 'plant') { D.f.plant = t.value; var s = S.cur.sitios.filter(function (x) { return x.planta === t.value; })[0]; if (s) D.f.city = s.ciudad; saveDraft(); render(); return; }
     if (D && t.dataset.photo) {
       var files = Array.prototype.slice.call(t.files || []).slice(0, ISR_MAX - D.photos.length); if (!files.length) return;
       toast('Procesando ' + files.length + (files.length === 1 ? ' foto…' : ' fotos…'));
