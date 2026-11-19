@@ -12,6 +12,8 @@
      POST /servicios/{ceco}/informes              -> Informe  (emite; consecutivo lo asigna el servidor)
      POST /servicios/{ceco}/informes/{n}/envios   -> Envio    (registra el envío; el correo lo manda el servidor)
      POST /fotos                                  -> { id }   (en producción: blob storage; aquí IndexedDB)
+     GET  /servicios/{ceco}/catalogo              -> { prog:[{n,v:[]}], eq:[{n,v:[]}] }  (programas y equipos del servicio)
+     POST /servicios/{ceco}/catalogo/{prog|eq}    -> catálogo (agrega "Otro" o una versión nueva)
      POST /servicios/{ceco}/notas-voz/interpretar -> { transcripcion, sugerencias }  (IA; aquí simulada)
 
    Servicio = {
@@ -78,6 +80,32 @@
     { id: 'diego-lopez', nombre: 'Diego López', cargo: 'Ingeniero', correo: 'diego.lopez@omnicon.com.co' },
     { id: 'ernesto-osorio', nombre: 'Ernesto Osorio', cargo: 'Ingeniero líder', correo: 'ernesto.osorio@omnicon.com.co' }
   ];
+
+  /* Catálogo de programas y equipos por servicio (se guarda en el servicio; crece con "Otro" y con cada informe emitido) */
+  var CAT0 = {
+    '30401007200': { prog: [['FactoryTalk View SE', ['12.0', '13.0']], ['Studio 5000 Logix Designer', ['32.00', '33.01']], ['RSLinx Classic', ['4.30']], ['FactoryTalk AssetCentre', ['12.0']]],
+      eq: [['ControlLogix 1756-L83E', ['32.011', '33.011']], ['Stratix 5700', ['15.2']], ['PowerFlex 525', ['7.001']], ['PanelView Plus 7', ['12.0']]] },
+    '30301053200': { prog: [['TIA Portal', ['V17', 'V18', 'V19']], ['WinCC Unified', ['V18']], ['SINAMICS Startdrive', ['V18']], ['SIMATIC STEP 7 Classic', ['5.6']]],
+      eq: [['S7-1515-2 PN', ['2.9', '3.0']], ['SINAMICS G120', ['4.7 SP14']], ['ET 200SP IM155-6 PN', ['4.2']], ['SCALANCE XB208', ['4.3']]] },
+    '30311054100': { prog: [['DeltaV', ['14.3', '15.LTS']], ['DeltaV Operate', ['14.3']]], eq: [['Controlador MQ', ['14.3.1']], ['CHARMs I/O Card', ['1.4']]] },
+    '30313002700': { prog: [['Studio 5000 Logix Designer', ['31.00', '32.00']], ['FactoryTalk View ME', ['12.0']]], eq: [['CompactLogix 5380', ['32.011']], ['PowerFlex 755', ['14.002']]] },
+    '30901001400': { prog: [['Connected Components Workbench', ['21.01', '22.00']], ['DriveExecutive', ['5.07']]], eq: [['PowerFlex 755', ['13.004', '14.002']], ['PowerFlex 525', ['7.001']]] }
+  };
+  function catSeed(ceco) {
+    var c = CAT0[ceco] || { prog: [], eq: [] }, sv = SERVICIOS.filter(function (x) { return x.ceco === ceco; })[0], out = { prog: [], eq: [] };
+    ['prog', 'eq'].forEach(function (k) {
+      c[k].forEach(function (r) { out[k].push({ n: r[0], v: r[1].slice() }); });
+      if (sv) sv.sistema[k].forEach(function (r) { catAdd(out, k, r.n, r.v); });
+    });
+    return out;
+  }
+  function catAdd(cat, k, n, v) {
+    n = String(n || '').trim(); v = String(v || '').trim(); if (!n) return;
+    var it = cat[k].filter(function (x) { return x.n.toLowerCase() === n.toLowerCase(); })[0];
+    if (!it) { it = { n: n, v: [] }; cat[k].push(it); }
+    if (v && it.v.indexOf(v) < 0) it.v.push(v);
+  }
+  function cat(ceco) { DB.catalogo = DB.catalogo || {}; return DB.catalogo[ceco] || (DB.catalogo[ceco] = catSeed(ceco)); }
 
   /* Informes ya emitidos (semilla) */
   function seed() {
@@ -194,9 +222,16 @@
     },
     getServicio: function (ceco) { return call('GET', '/servicios/' + ceco, function () { return withSys(svc(ceco)); }); },
     listInformes: function (ceco) { return call('GET', '/servicios/' + ceco + '/informes', function () { svc(ceco); return list(ceco); }); },
+    /* GET /servicios/{ceco}/catalogo · POST /servicios/{ceco}/catalogo/{prog|eq}  { n, v } */
+    getCatalogo: function (ceco) { return call('GET', '/servicios/' + ceco + '/catalogo', function () { svc(ceco); return cat(ceco); }); },
+    agregarCatalogo: function (ceco, tipo, item) {
+      return call('POST', '/servicios/' + ceco + '/catalogo/' + tipo, function () { svc(ceco); if (tipo !== 'prog' && tipo !== 'eq') throw new Error('400'); var c = cat(ceco); catAdd(c, tipo, item.n, item.v); save(); return c; });
+    },
     emitirInforme: function (ceco, inf) {
       return call('POST', '/servicios/' + ceco + '/informes', function () {
-        svc(ceco); var L = list(ceco); inf.n = (L.length ? L[L.length - 1].n : 0) + 1; inf.sent = inf.sent || []; L.push(inf); save(); return inf;
+        svc(ceco); var L = list(ceco); inf.n = (L.length ? L[L.length - 1].n : 0) + 1; inf.sent = inf.sent || []; L.push(inf);
+        var c = cat(ceco); (inf.prog || []).forEach(function (r) { catAdd(c, 'prog', r.n, r.v); }); (inf.eq || []).forEach(function (r) { catAdd(c, 'eq', r.n, r.v); });
+        save(); return inf;
       });
     },
     enviarInforme: function (ceco, n, envio) {

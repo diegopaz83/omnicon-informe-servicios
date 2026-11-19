@@ -294,7 +294,7 @@
     };
     if (S.cur && S.cur.ceco === ceco && S.view !== 'home') return after();
     S.loading = true; S.view = 'svc'; render();
-    Promise.all([API.getServicio(ceco), API.listInformes(ceco)]).then(function (r) { S.cur = r[0]; S.infs = r[1].map(fixInf); S.loading = false; after(); }, function (e) { S.loading = false; toast('No se pudo abrir el servicio (' + e.message + ')'); location.hash = 'inicio'; });
+    Promise.all([API.getServicio(ceco), API.listInformes(ceco), API.getCatalogo(ceco)]).then(function (r) { S.cur = r[0]; S.infs = r[1].map(fixInf); S.cat = r[2]; S.loading = false; after(); }, function (e) { S.loading = false; toast('No se pudo abrir el servicio (' + e.message + ')'); location.hash = 'inicio'; });
   }
   function fixInf(i) { if (!i.role) i.role = i.cargo || 'Ingeniero'; return i; }
   function loadHome() {
@@ -436,8 +436,11 @@
         inp('subj', 'Asunto');
     } else if (k === 1) {
       var sys = function (key, a, b) {
-        return '<div class="field"><span class="lb">' + a + 's</span><div class="sys">' + (D[key].length ? D[key].map(function (r, i) { return '<div class="sys-r"><input class="f" data-sys="' + key + ':' + i + ':n" value="' + esc(r.n) + '" placeholder="' + a + '" aria-label="' + a + ' ' + (i + 1) + '"><input class="f" data-sys="' + key + ':' + i + ':v" value="' + esc(r.v) + '" placeholder="' + b + '" aria-label="' + b + ' ' + (i + 1) + '"><button class="x" data-act="sysrm" data-v="' + key + ':' + i + '" aria-label="Quitar">' + ic('i-x') + '</button></div>'; }).join('') : '<span class="hint">Sin registros.</span>') +
-          '<button class="btn sm" data-act="sysadd" data-v="' + key + '" style="align-self:flex-start">' + ic('i-plus') + 'Agregar ' + a.toLowerCase() + '</button></div></div>';
+        return '<div class="field"><span class="lb">' + a + 's</span><div class="sysl">' + (D[key].length ? D[key].map(function (r, i) {
+          return '<div class="sysi"><button type="button" class="sysi-m" data-act="sysedit" data-v="' + key + ':' + i + '" aria-label="Cambiar ' + esc(r.n) + '"><b>' + esc(r.n || 'Sin nombre') + '</b><span class="ver">' + (r.v ? b + ' ' + esc(r.v) : 'Sin ' + b.toLowerCase()) + '</span>' + ic('i-edit') + '</button>' +
+            '<button type="button" class="x" data-act="sysrm" data-v="' + key + ':' + i + '" aria-label="Quitar ' + esc(r.n) + '">' + ic('i-x') + '</button></div>';
+        }).join('') : '<span class="hint">Sin ' + a.toLowerCase() + 's registrados.</span>') +
+          '<button type="button" class="btn sm" data-act="sysadd" data-v="' + key + '" style="align-self:flex-start">' + ic('i-plus') + 'Agregar ' + a.toLowerCase() + '</button></div></div>';
       };
       body = vozCard() + '<h3 class="sec-t">Generalidades</h3>' + txa(ISF[0], 5) +
         '<h3 class="sec-t">Descripción del sistema</h3><span class="hint">Viene del último informe de este servicio. Ajusta lo que haya cambiado.</span>' + sys('prog', 'Programa', 'Versión') + sys('eq', 'Equipo', 'Firmware') + txa(ISF[1], 3);
@@ -694,6 +697,51 @@
   function rerenderLayer() { $('layer').innerHTML = LAYER ? LAYER() : ''; paintPhotos(); }
   function closeLayer() { layer(null); }
 
+  /* ---------- Programas y equipos: elegir del catálogo del servicio, o "Otro" (queda guardado en el servicio) ---------- */
+  var SYS = null, SYSL = { prog: ['Programa', 'Versión', 'programas'], eq: ['Equipo', 'Firmware', 'equipos'] };
+  function sysItems() {
+    var L = (S.cat && S.cat[SYS.tipo]) || [], q = norm(SYS.q);
+    return L.filter(function (x) { return !q || norm(x.n).indexOf(q) >= 0 || x.v.some(function (v) { return norm(v).indexOf(q) >= 0; }); }).sort(function (a, b) { return a.n.localeCompare(b.n); });
+  }
+  function sysListHtml() {
+    var L = sysItems(), used = D[SYS.tipo].map(function (r) { return r.n.toLowerCase(); }), lb = SYSL[SYS.tipo];
+    return (L.length ? L.map(function (x) {
+      var u = used.indexOf(x.n.toLowerCase()) >= 0 && SYS.idx < 0;
+      return '<button type="button" class="pick' + (u ? ' used' : '') + '" data-act="syspick" data-v="' + esc(x.n) + '"><span><b>' + esc(x.n) + '</b><small>' + (x.v.length ? lb[1] + ': ' + esc(x.v.join(' · ')) : 'Sin ' + lb[1].toLowerCase() + ' registrada') + '</small></span>' + (u ? '<em>Ya agregado</em>' : ic('i-chev')) + '</button>';
+    }).join('') : '<p class="hint" style="padding:8px 2px">No hay ' + lb[2] + ' que coincidan' + (SYS.q ? ' con «' + esc(SYS.q) + '»' : '') + '.</p>') +
+      '<button type="button" class="pick otro" data-act="sysotro">' + ic('i-plus') + '<span><b>Otro ' + lb[0].toLowerCase() + (SYS.q ? ': «' + esc(SYS.q) + '»' : '') + '</b><small>Se guarda en este servicio para reusarlo</small></span></button>';
+  }
+  function sysSheet() {
+    var lb = SYSL[SYS.tipo], body, foot = '';
+    if (SYS.otro) {
+      body = '<div class="field"><label for="sysnn">Nombre del ' + lb[0].toLowerCase() + '</label><input class="f" id="sysnn" value="' + esc(SYS.nn) + '" autocomplete="off"></div>' +
+        '<div class="field"><label for="sysnv">' + lb[1] + '</label><input class="f" id="sysnv" value="' + esc(SYS.nv) + '" autocomplete="off"></div>' +
+        '<span class="hint">Queda guardado en el servicio y aparecerá en la lista la próxima vez.</span>' + (SYS.err ? '<span class="err">' + esc(SYS.err) + '</span>' : '');
+      foot = '<button class="btn" data-act="sysback">Atrás</button><button class="btn primary" data-act="sysok">Agregar y guardar</button>';
+      return sheet('Otro ' + lb[0].toLowerCase(), S.cur.nombre, body, foot);
+    }
+    if (SYS.pick) {
+      var it = ((S.cat && S.cat[SYS.tipo]) || []).filter(function (x) { return x.n === SYS.pick; })[0] || { n: SYS.pick, v: [] };
+      body = '<div class="pp-sys"><b>' + esc(it.n) + '</b><span class="hint">Elige la ' + lb[1].toLowerCase() + ' instalada</span></div>' +
+        '<div class="vchips">' + it.v.map(function (v) { return '<button type="button" class="vchip' + (SYS.ver === v && !SYS.ov ? ' on' : '') + '" data-act="sysver" data-v="' + esc(v) + '">' + esc(v) + '</button>'; }).join('') + '</div>' +
+        '<div class="field"><label for="sysov">Otra ' + lb[1].toLowerCase() + '</label><input class="f" id="sysov" value="' + esc(SYS.ov) + '" placeholder="Escríbela si no está en la lista" autocomplete="off"></div>';
+      foot = (SYS.idx >= 0 && !SYS.fromList ? '<button class="btn" data-act="close">Cancelar</button>' : '<button class="btn" data-act="sysback">Atrás</button>') + '<button class="btn primary" data-act="sysok">' + (SYS.idx >= 0 ? 'Guardar' : 'Agregar') + '</button>';
+      return sheet(SYS.idx >= 0 ? 'Cambiar ' + lb[0].toLowerCase() : 'Agregar ' + lb[0].toLowerCase(), S.cur.nombre, body, foot);
+    }
+    body = '<div class="search">' + ic('i-search') + '<input class="f" id="sysq" type="search" placeholder="Buscar ' + lb[0].toLowerCase() + ' o ' + lb[1].toLowerCase() + '" value="' + esc(SYS.q) + '" autocomplete="off" aria-label="Buscar"></div>' +
+      '<span class="hint">' + lb[2].charAt(0).toUpperCase() + lb[2].slice(1) + ' usados en este servicio</span><div class="picks" id="sysList">' + sysListHtml() + '</div>';
+    return sheet('Agregar ' + lb[0].toLowerCase(), S.cur.nombre, body, '');
+  }
+  function sysSave() {
+    var tipo = SYS.tipo, n = SYS.otro ? tx(SYS.nn) : SYS.pick, v = SYS.otro ? tx(SYS.nv) : tx(SYS.ov) || SYS.ver || '';
+    if (!n) { SYS.err = 'Escribe el nombre.'; return rerenderLayer(); }
+    var row = { n: n, v: v };
+    if (SYS.idx >= 0) D[tipo][SYS.idx] = row; else D[tipo].push(row);
+    saveDraft(true); closeLayer(); render();
+    var nuevo = SYS.otro || (v && !((((S.cat && S.cat[tipo]) || []).filter(function (x) { return x.n === n; })[0] || { v: [] }).v.indexOf(v) >= 0));
+    if (nuevo) API.agregarCatalogo(S.cur.ceco, tipo, row).then(function (c) { S.cat = c; toast('Guardado en el servicio para reusarlo'); }, function () { toast('Se agregó al informe; no se pudo guardar en el servicio'); });
+  }
+
   function viewSheet(n) {
     var i = S.infs.filter(function (x) { return x.n === n; })[0], p = P(S.cur);
     return sheet('Informe de servicio #' + i.n, fd(i.at) + ' · ' + i.by, isrDoc(p, i, false),
@@ -781,7 +829,14 @@
         sendInit('new'); layer(sendSheet); break;
       case 'sendgo': sendGo(); break;
       case 'step': D.step = +v; saveDraft(true); render(); window.scrollTo(0, 0); break;
-      case 'sysadd': D[v].push({ n: '', v: '' }); saveDraft(); render(); break;
+      case 'sysadd': SYS = { tipo: v, q: '', pick: null, idx: -1, ver: '', ov: '', otro: false, nn: '', nv: '' }; layer(sysSheet); setTimeout(function () { var q = $('sysq'); if (q && window.innerWidth > 700) q.focus(); }, 50); break;
+      case 'sysedit': var se = v.split(':'), sr = D[se[0]][+se[1]], known = ((S.cat && S.cat[se[0]]) || []).filter(function (x) { return x.n === sr.n; })[0];
+        SYS = { tipo: se[0], q: '', pick: sr.n, idx: +se[1], ver: known && known.v.indexOf(sr.v) >= 0 ? sr.v : '', ov: known && known.v.indexOf(sr.v) >= 0 ? '' : sr.v, otro: false, nn: '', nv: '' }; layer(sysSheet); break;
+      case 'syspick': SYS.pick = v; SYS.fromList = true; SYS.ver = ''; SYS.ov = ''; var ki = (S.cat[SYS.tipo].filter(function (x) { return x.n === v; })[0] || { v: [] }).v; if (ki.length === 1) SYS.ver = ki[0]; rerenderLayer(); break;
+      case 'sysver': SYS.ver = v; SYS.ov = ''; rerenderLayer(); break;
+      case 'sysotro': SYS.otro = true; SYS.nn = SYS.q; SYS.err = ''; rerenderLayer(); setTimeout(function () { var x = $(SYS.nn ? 'sysnv' : 'sysnn'); if (x) x.focus(); }, 50); break;
+      case 'sysback': SYS.pick = null; SYS.otro = false; SYS.err = ''; rerenderLayer(); break;
+      case 'sysok': sysSave(); break;
       case 'sysrm': var kk = v.split(':'); D[kk[0]].splice(+kk[1], 1); saveDraft(); render(); break;
       case 'phrm': D.photos = D.photos.filter(function (x) { return x.id !== v; }); saveDraft(); render(); break;
       case 'discard': layer(function () { return sheet('¿Descartar el borrador?', '', '<p>Se pierden los textos y las fotos de este borrador. No se puede deshacer.</p>', '<button class="btn" data-act="close">Cancelar</button><button class="btn primary" data-act="discardgo" style="background:var(--err-ink);border-color:var(--err-ink)">Descartar</button>'); }); break;
@@ -801,6 +856,11 @@
   });
   document.addEventListener('input', function (e) {
     var t = e.target;
+    if (SYS && LAYER === sysSheet) {
+      if (t.id === 'sysq') { SYS.q = t.value; var sl = $('sysList'); if (sl) sl.innerHTML = sysListHtml(); return; }
+      if (t.id === 'sysnn') { SYS.nn = t.value; return; } if (t.id === 'sysnv') { SYS.nv = t.value; return; }
+      if (t.id === 'sysov') { SYS.ov = t.value; var on = document.querySelector('.vchip.on'); if (on && t.value) on.classList.remove('on'); return; }
+    }
     if (t.id === 'q') { S.q = t.value; var pos = t.selectionStart; render(); var q = $('q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } return; }
     if (!D) return;
     if (t.dataset.f) { D.f[t.dataset.f] = t.value; saveDraft(); var fw = t.closest('.field'); if (fw) { fw.classList.toggle('f-ok', !!tx(t.value)); fw.classList.toggle('f-empty', !tx(t.value)); } }
