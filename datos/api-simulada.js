@@ -133,7 +133,7 @@
     return o;
   }
 
-  /* ---- IA simulada: reparte frases por palabras clave; sin transcripción, devuelve un ejemplo ---- */
+  /* ---- IA simulada: reparte frases por palabras clave. Solo propone campos con contenido dicho; nunca inventa ---- */
   function nrm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
   var CLAVES = [
     ['imp', ['recomiendo', 'recomendamos', 'recomendacion', 'mejora', 'sugerimos', 'sugiero', 'seria bueno', 'convendria', 'a futuro', 'deberian']],
@@ -147,12 +147,8 @@
   function trozos(t) { return String(t).split(/(?<=[.;!?])\s+|\n+|\s+(?:y luego|luego|despues|después|ademas|además)\s+/i).map(function (x) { return x.replace(/^[,\s]+|[,\s]+$/g, ''); }).filter(function (x) { return x.length > 3; }); }
   function interpretar(s, nota) {
     var campo = nota.campo || null, texto = String(nota.texto || '').trim(), out = {};
-    if (!texto) {
-      var ej = ejemplo(s);
-      if (campo) { out[campo] = ej[campo]; return { transcripcion: ej._dicho[campo], sugerencias: out, simulada: true }; }
-      var all = {}; Object.keys(ej).forEach(function (k) { if (k !== '_dicho') all[k] = ej[k]; });
-      return { transcripcion: Object.keys(ej._dicho).map(function (k) { return ej._dicho[k]; }).join(' '), sugerencias: all, simulada: true };
-    }
+    /* Sin transcripción no se inventa nada: no hay sugerencias */
+    if (!texto) return { transcripcion: '', sugerencias: {}, simulada: true };
     var partes = trozos(texto);
     if (campo) { out[campo] = campo === 'acts' ? partes.map(frase).join('\n') : partes.map(frase).join(' '); return { transcripcion: texto, sugerencias: out, simulada: true }; }
     partes.forEach(function (p) {
@@ -163,28 +159,6 @@
     Object.keys(out).forEach(function (k) { out[k] = out[k].join(k === 'acts' ? '\n' : ' '); });
     return { transcripcion: texto, sugerencias: out, simulada: true };
   }
-  function ejemplo(s) {
-    var eq = s.sistema.eq[0] ? s.sistema.eq[0].n : 'el controlador', planta = s.sitios[0] ? s.sitios[0].planta : 'la planta';
-    return {
-      bg: 'El cliente reportó paradas intermitentes en la línea durante el turno de la noche, con alarmas de comunicación en ' + eq + '. El último servicio en ' + planta + ' fue el mantenimiento preventivo anterior.',
-      acts: 'Revisión del histórico de alarmas en el HMI.\nRespaldo de programas del controlador y de la aplicación HMI.\nInspección de cableado y conectores de red en el tablero principal.\nAjuste de parámetros de comunicación y reapriete de borneras.',
-      tests: 'Prueba de funcionamiento con producto durante un turno completo, sin alarmas de comunicación.',
-      diag: 'Conector de red deteriorado en el tablero principal, que generaba pérdidas intermitentes de comunicación.',
-      sol: 'Reemplazo del conector, certificación del cable y verificación del enlace.',
-      obs: 'El sistema queda operando normalmente. Queda pendiente programar la actualización de firmware de ' + eq + '.',
-      imp: 'Implementar monitoreo de diagnósticos de red en el HMI para anticipar fallas.',
-      _dicho: {
-        bg: 'Nos llamaron porque la línea se venía parando en el turno de la noche, con alarmas de comunicación.',
-        acts: 'Revisamos el histórico de alarmas, sacamos respaldo de los programas, revisamos cableado y conectores y reapretamos borneras.',
-        tests: 'Probamos con producto todo un turno y no volvió a fallar.',
-        diag: 'La causa era un conector de red dañado en el tablero principal.',
-        sol: 'Cambiamos el conector y certificamos el cable.',
-        obs: 'Queda funcionando normal, pendiente la actualización de firmware.',
-        imp: 'Recomiendo poner el diagnóstico de red en el HMI.'
-      }
-    };
-  }
-
   window.KisAPI = {
     version: '0.1 · simulada',
     log: LOG,

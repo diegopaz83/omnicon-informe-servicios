@@ -206,20 +206,30 @@
       if (!D || !S.cur || S.cur.ceco !== ceco) return;
       n.st = 'ok'; n.sim = !!r.simulada; if (!n.text && r.transcripcion) { n.text = r.transcripcion; n.textSim = true; }
       D.sug = D.sug || {}; var ks = [];
-      Object.keys(r.sugerencias || {}).forEach(function (k) { var t = tx(r.sugerencias[k]); if (t && VOZ_CAMPOS[k]) { D.sug[k] = { text: t, nota: id }; ks.push(k); } });
+      Object.keys(r.sugerencias || {}).forEach(function (k) {
+        var t = tx(r.sugerencias[k]); if (!t || !VOZ_CAMPOS[k]) return;
+        var L = sugsOf(k).filter(function (x) { return x.nota !== id; });
+        L.push({ id: 'sg-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text: t, nota: id, campo: n.campo || null }); D.sug[k] = L; ks.push(k);
+      });
+      if (!ks.length) n.st = n.text ? 'ok' : 'vacia';
       saveDraft(true); render();
-      toast(!ks.length ? 'No se encontró contenido para sugerir' : n.campo ? 'Sugerencia lista debajo del campo' : 'Sugerencias listas en ' + ks.length + ' campos · los pasos con punto verde tienen sugerencias');
+      toast(!ks.length ? (n.text ? 'La nota no trae contenido para estos campos' : 'La nota no tiene transcripción: quedó guardada como audio') : n.campo ? 'Sugerencia lista debajo del campo' : 'Sugerencias listas en ' + ks.length + ' campos · los pasos con punto verde tienen sugerencias');
     }, function () { n.st = 'pend'; saveDraft(true); render(); toast('No se pudo interpretar la nota; queda guardada'); });
   }
+  function sugsOf(k) { var v = D.sug && D.sug[k]; if (!v) return []; if (!Array.isArray(v)) { v = [v]; D.sug[k] = v; } return v; }
+  function sugCount(k) { return sugsOf(k).length; }
   function sugCard(k) {
-    var sg = D.sug && D.sug[k]; if (!sg) return '';
+    var L = sugsOf(k); if (!L.length) return '';
     var full = !!tx(D.f[k]);
-    return '<div class="sug" role="region" aria-label="Sugerencia para ' + esc(VOZ_CAMPOS[k]) + '"><div class="sug-h">' + ic('i-spark') + '<b>Sugerencia a partir de tu nota de voz</b><span class="sim">IA simulada</span></div>' +
-      '<p>' + esc(sg.text) + '</p><div class="sug-a"><button type="button" class="btn sm" data-act="sugno" data-v="' + k + '">Descartar</button>' +
-      (full ? '<button type="button" class="btn sm" data-act="sugadd" data-v="' + k + '">Agregar al final</button><button type="button" class="btn sm primary" data-act="sugusar" data-v="' + k + '">Reemplazar</button>' : '<button type="button" class="btn sm primary" data-act="sugusar" data-v="' + k + '">' + ic('i-check') + 'Usar</button>') + '</div></div>';
+    return L.map(function (sg, i) {
+      var v = k + '|' + sg.id, src = sg.campo ? 'De tu nota de voz en este campo' : 'Del dictado del informe completo';
+      return '<div class="sug" role="region" aria-label="Sugerencia para ' + esc(VOZ_CAMPOS[k]) + '"><div class="sug-h">' + ic('i-spark') + '<b>' + (L.length > 1 ? 'Sugerencia ' + (i + 1) + ' · ' : 'Sugerencia · ') + src + '</b><span class="sim">IA simulada</span></div>' +
+        '<p>' + esc(sg.text) + '</p><div class="sug-a"><button type="button" class="btn sm" data-act="sugno" data-v="' + v + '">Descartar</button>' +
+        (full ? '<button type="button" class="btn sm" data-act="sugadd" data-v="' + v + '">Agregar al final</button><button type="button" class="btn sm primary" data-act="sugusar" data-v="' + v + '">Reemplazar</button>' : '<button type="button" class="btn sm primary" data-act="sugusar" data-v="' + v + '">' + ic('i-check') + 'Usar</button>') + '</div></div>';
+    }).join('');
   }
   function notaRow(n) {
-    var st = n.st === 'run' ? '<span class="chip run">Interpretando…</span>' : n.st === 'ok' ? '<span class="chip ok">Interpretada</span>' : '<span class="chip pend">Pendiente</span>';
+    var st = n.st === 'run' ? '<span class="chip run">Interpretando…</span>' : n.st === 'ok' ? '<span class="chip ok">Interpretada</span>' : n.st === 'vacia' ? '<span class="chip">Sin transcripción</span>' : '<span class="chip pend">Pendiente</span>';
     var d = new Date(n.at);
     return '<div class="nota"><div class="nota-h">' + ic('i-mic') + '<b>' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '</b><span class="hint">' + mmss(n.dur) + '</span>' + st + '</div>' +
       (n.audio ? '<audio controls preload="none" data-aud="' + n.id + '"></audio>' : '') +
@@ -382,7 +392,7 @@
   }
   function editView() {
     var s = S.cur, k = D.step;
-    var steps = '<nav class="steps" aria-label="Pasos">' + STEPS.map(function (x, i) { var hasSug = Object.keys(D.sug || {}).some(function (q) { return VOZ_PASO[q] === i; }); return '<button class="step' + (stepDone(i) ? ' done' : '') + (hasSug ? ' has-sug' : '') + '" data-act="step" data-v="' + i + '"' + (i === k ? ' aria-current="step"' : '') + '><i>' + (stepDone(i) && i !== k ? '✓' : i + 1) + '</i><span>' + x[0] + '</span></button>'; }).join('') + '</nav>';
+    var steps = '<nav class="steps" aria-label="Pasos">' + STEPS.map(function (x, i) { var hasSug = Object.keys(D.sug || {}).some(function (q) { return VOZ_PASO[q] === i && sugCount(q); }); return '<button class="step' + (stepDone(i) ? ' done' : '') + (hasSug ? ' has-sug' : '') + '" data-act="step" data-v="' + i + '"' + (i === k ? ' aria-current="step"' : '') + '><i>' + (stepDone(i) && i !== k ? '✓' : i + 1) + '</i><span>' + x[0] + '</span></button>'; }).join('') + '</nav>';
     var body = '';
     if (k === 0) {
       var sites = s.sitios.map(function (x) { return x.planta; }); if (D.f.plant && sites.indexOf(D.f.plant) < 0) sites.push(D.f.plant);
@@ -747,11 +757,12 @@
       case 'recstop': recStop(false); break;
       case 'reccancel': recStop(true); break;
       case 'notaint': interpretar(v); break;
-      case 'notadel': D.notes = (D.notes || []).filter(function (x) { return x.id !== v; }); saveDraft(true); render(); break;
-      case 'sugusar': case 'sugadd':
-        var sg = D.sug && D.sug[v]; if (!sg) break;
-        D.f[v] = a === 'sugadd' && tx(D.f[v]) ? D.f[v].replace(/\s+$/, '') + '\n' + sg.text : sg.text; delete D.sug[v]; saveDraft(true); render(); toast('Sugerencia aplicada · revísala y ajústala si hace falta'); break;
-      case 'sugno': if (D.sug) delete D.sug[v]; saveDraft(true); render(); break;
+      case 'notadel': D.notes = (D.notes || []).filter(function (x) { return x.id !== v; }); Object.keys(D.sug || {}).forEach(function (q) { D.sug[q] = sugsOf(q).filter(function (x) { return x.nota !== v; }); if (!D.sug[q].length) delete D.sug[q]; }); saveDraft(true); render(); break;
+      case 'sugusar': case 'sugadd': case 'sugno':
+        var sp = v.split('|'), fk = sp[0], sl = sugsOf(fk), sg = sl.filter(function (x) { return x.id === sp[1]; })[0]; if (!sg) break;
+        if (a !== 'sugno') D.f[fk] = a === 'sugadd' && tx(D.f[fk]) ? D.f[fk].replace(/\s+$/, '') + '\n' + sg.text : sg.text;
+        D.sug[fk] = sl.filter(function (x) { return x !== sg; }); if (!D.sug[fk].length) delete D.sug[fk];
+        saveDraft(true); render(); if (a !== 'sugno') toast('Sugerencia aplicada · revísala y ajústala si hace falta'); break;
       case 'discardgo': store.set(dKey(S.cur.ceco), null); D = null; closeLayer(); toast('Borrador descartado'); go('s-' + S.cur.ceco); break;
     }
   });
