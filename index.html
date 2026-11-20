@@ -44,6 +44,30 @@
 <script src="datos/api-simulada.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
 <script src="lib/jspdf.plugin.autotable.min.js"></script>
+<script>/* Siempre arranca en la pantalla de perfiles */ try { localStorage.removeItem('kis.me'); } catch (e) {} if (location.hash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }</script>
 <script src="app.js"></script>
+<style id="lab-link-css">
+/* Botón hacia Omnicon Lab en la pantalla de perfiles */
+.lab-link { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-radius: 999px; border: 1px solid rgba(0,220,250,.45); background: rgba(0,28,63,.55); color: #fff; font: 500 13px/1.2 'Poppins', 'Segoe UI', system-ui, sans-serif; text-decoration: none; white-space: nowrap; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: border-color .2s, background-color .2s; }
+.lab-link:hover { border-color: #00dcfa; background: rgba(0,40,90,.85); color: #fff; }
+.lab-link:focus-visible { outline: 2px solid #00dcfa; outline-offset: 2px; }
+.lab-link svg { width: 16px; height: 16px; flex: none; }
+.login-in > .lab-link { position: absolute; top: calc(var(--safe-t, 0px) + 23px); right: 20px; }
+</style>
+<script id="lab-link-js">
+(function () {
+  'use strict';
+  var app = document.getElementById('app'); if (!app) return;
+  var ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.6" fill="#00dcfa"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="2.75" fill="none" stroke="#00dcfa" stroke-width="1.5"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="2.75" fill="none" stroke="#00dcfa" stroke-width="1.5"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.6" fill="#00dcfa"/></svg>';
+  function add() {
+    var box = app.querySelector('.login-in'); if (!box || box.querySelector('.lab-link')) return;
+    var a = document.createElement('a');
+    a.className = 'lab-link'; a.href = 'https://diegopaz83.github.io/omnicon-lab/'; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Ver todos los productos de Omnicon';
+    a.innerHTML = ICON + '<span>Ir a Omnicon Lab</span>';
+    box.appendChild(a);
+  }
+  new MutationObserver(add).observe(app, { childList: true, subtree: true }); add();
+})();
+</script>
 </body>
 </html>
